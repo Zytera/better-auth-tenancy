@@ -101,7 +101,7 @@ await authClient.assignMedicalUnitScopeGroup({
 ### Check Permissions
 
 ```typescript
-// Check if user has permission
+// Check single permission
 const { hasPermission } = await authClient.checkPermission({
   userId: "user-123",
   scopeName: "unit.members.write",
@@ -114,6 +114,30 @@ const { hasPermission } = await authClient.checkPermission({
 if (hasPermission) {
   // User can write to unit members
 }
+
+// Check multiple permissions with AND logic (all must be present)
+const { hasPermission: canManageUsers } = await authClient.checkPermissions({
+  userId: "user-123",
+  expression: {
+    and: ["hospital.users.read", "hospital.users.write", "hospital.users.delete"]
+  },
+  context: {
+    type: "organization",
+    organizationId: "hospital-1",
+  },
+});
+
+// Check multiple permissions with OR logic (at least one must be present)
+const { hasPermission: isAdmin } = await authClient.checkPermissions({
+  userId: "user-123",
+  expression: {
+    or: ["hospital.admin", "service.admin", "unit.admin"]
+  },
+  context: {
+    type: "organization",
+    organizationId: "hospital-1",
+  },
+});
 ```
 
 ### Medical Units
@@ -304,24 +328,85 @@ Dr. López can be:
   - `unit.editor` at Hemodinámica
   - No access to Electrofisiología
 
+## Scope Naming Convention
+
+The plugin follows a clear naming convention to distinguish between admin and user scopes:
+
+### Admin Scopes (end with `.manage`)
+Scopes ending in `.manage` grant permission to modify **any** resource, not just owned resources.
+
+```typescript
+"hospital.users.manage"      // Can manage ANY user in hospital
+"service.members.manage"     // Can manage ANY member in service
+"unit.schedules.manage"      // Can manage ANY schedule in unit
+"hospital.settings.manage"   // Can manage hospital settings
+```
+
+### User Scopes (end with `.read` or `.write`)
+Scopes for personal resources - your application logic should verify ownership.
+
+```typescript
+"personal.profile.read"      // Read own profile
+"personal.profile.write"     // Edit own profile
+"personal.schedule.read"     // Read own schedule
+"personal.schedule.write"    // Edit own schedule
+```
+
+### Shared/Read Scopes
+General read access that doesn't require ownership.
+
+```typescript
+"hospital.reports.read"      // Read hospital reports
+"unit.members.read"          // View unit members
+"service.statistics.read"    // View service statistics
+```
+
+## Permission Checking Pattern
+
+```typescript
+// Example: Updating a user profile
+async function updateUser(actorUserId: string, targetUserId: string, data: any) {
+  // Check if user is admin (can edit anyone)
+  const isAdmin = await authClient.checkPermission({
+    userId: actorUserId,
+    scopeName: "hospital.users.manage",
+    context: { type: "organization", organizationId: "hospital-1" }
+  });
+
+  // Check if user is editing their own profile
+  const isOwner = actorUserId === targetUserId;
+  const canEditOwn = isOwner && await authClient.checkPermission({
+    userId: actorUserId,
+    scopeName: "personal.profile.write",
+    context: { type: "organization", organizationId: "hospital-1" }
+  });
+
+  if (!isAdmin && !canEditOwn) {
+    throw new Error("Permission denied");
+  }
+
+  // Proceed with update...
+}
+```
+
 ## Predefined Scope Groups
 
 ### Personal
-- `personal.basic`
+- `personal.basic` - Basic user permissions (profile, schedule read/write)
 
 ### Unit Level
 - `unit.viewer` - Read-only access
-- `unit.editor` - Full management without permissions
-- `unit.admin` - Full control including permissions
+- `unit.editor` - Full management without `.manage` permissions
+- `unit.admin` - Full control including `.manage` permissions
 
 ### Service Level
 - `service.viewer` - Read-only access
-- `service.editor` - Full management without permissions
-- `service.admin` - Full control including permissions
+- `service.editor` - Full management without `.manage` permissions
+- `service.admin` - Full control including `.manage` permissions
 
 ### Hospital Level
 - `hospital.viewer` - Read-only access
-- `hospital.admin` - Full control
+- `hospital.admin` - Full control including all `.manage` permissions
 
 ### Special
 - `residents.tutor` - Tutor permissions

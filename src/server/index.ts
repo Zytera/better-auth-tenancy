@@ -2,7 +2,7 @@ import type { BetterAuthPlugin } from "better-auth";
 import { createAuthEndpoint } from "better-auth/api";
 import { generateId } from "better-auth";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import {
     scope,
     scopeGroup,
@@ -497,42 +497,310 @@ export function permissionsPlugin(): BetterAuthPlugin {
                     const db = ctx.context.adapter.db;
                     const { userId, scopeName, context } = ctx.body;
 
-                    // Get scope
-                    const scopeRecord = await db
-                        .select()
-                        .from(scope)
-                        .where(eq(scope.name, scopeName))
-                        .limit(1);
-
-                    if (scopeRecord.length === 0) {
-                        return ctx.json({ hasPermission: false });
-                    }
-
-                    // Check based on context type
                     let hasPermission = false;
 
                     if (context.type === "organization") {
+                        // Check scopes from groups (expanded) + individual scopes
                         const result = await db
-                            .select()
-                            .from(userOrganizationScope)
-                            .where(eq(userOrganizationScope.userId, userId))
+                            .selectDistinct({ scopeName: scope.name })
+                            .from(scope)
+                            .where(
+                                and(
+                                    eq(scope.name, scopeName),
+                                    or(
+                                        // Scopes from assigned groups
+                                        db.$exists(
+                                            db.select()
+                                                .from(userOrganizationScopeGroup)
+                                                .innerJoin(
+                                                    scopeGroupScope,
+                                                    eq(userOrganizationScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                )
+                                                .where(
+                                                    and(
+                                                        eq(userOrganizationScopeGroup.userId, userId),
+                                                        eq(userOrganizationScopeGroup.organizationId, context.organizationId),
+                                                        eq(scopeGroupScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        ),
+                                        // Individual scopes
+                                        db.$exists(
+                                            db.select()
+                                                .from(userOrganizationScope)
+                                                .where(
+                                                    and(
+                                                        eq(userOrganizationScope.userId, userId),
+                                                        eq(userOrganizationScope.organizationId, context.organizationId),
+                                                        eq(userOrganizationScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        )
+                                    )
+                                )
+                            )
                             .limit(1);
+
                         hasPermission = result.length > 0;
                     } else if (context.type === "team") {
+                        // Check scopes from groups (expanded) + individual scopes
                         const result = await db
-                            .select()
-                            .from(userTeamScope)
-                            .where(eq(userTeamScope.userId, userId))
+                            .selectDistinct({ scopeName: scope.name })
+                            .from(scope)
+                            .where(
+                                and(
+                                    eq(scope.name, scopeName),
+                                    or(
+                                        // Scopes from assigned groups
+                                        db.$exists(
+                                            db.select()
+                                                .from(userTeamScopeGroup)
+                                                .innerJoin(
+                                                    scopeGroupScope,
+                                                    eq(userTeamScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                )
+                                                .where(
+                                                    and(
+                                                        eq(userTeamScopeGroup.userId, userId),
+                                                        eq(userTeamScopeGroup.teamId, context.teamId),
+                                                        eq(scopeGroupScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        ),
+                                        // Individual scopes
+                                        db.$exists(
+                                            db.select()
+                                                .from(userTeamScope)
+                                                .where(
+                                                    and(
+                                                        eq(userTeamScope.userId, userId),
+                                                        eq(userTeamScope.teamId, context.teamId),
+                                                        eq(userTeamScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        )
+                                    )
+                                )
+                            )
                             .limit(1);
+
                         hasPermission = result.length > 0;
                     } else if (context.type === "medicalUnit") {
+                        // Check scopes from groups (expanded) + individual scopes
                         const result = await db
-                            .select()
-                            .from(userMedicalUnitScope)
-                            .where(eq(userMedicalUnitScope.userId, userId))
+                            .selectDistinct({ scopeName: scope.name })
+                            .from(scope)
+                            .where(
+                                and(
+                                    eq(scope.name, scopeName),
+                                    or(
+                                        // Scopes from assigned groups
+                                        db.$exists(
+                                            db.select()
+                                                .from(userMedicalUnitScopeGroup)
+                                                .innerJoin(
+                                                    scopeGroupScope,
+                                                    eq(userMedicalUnitScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                )
+                                                .where(
+                                                    and(
+                                                        eq(userMedicalUnitScopeGroup.userId, userId),
+                                                        eq(userMedicalUnitScopeGroup.medicalUnitId, context.medicalUnitId),
+                                                        eq(scopeGroupScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        ),
+                                        // Individual scopes
+                                        db.$exists(
+                                            db.select()
+                                                .from(userMedicalUnitScope)
+                                                .where(
+                                                    and(
+                                                        eq(userMedicalUnitScope.userId, userId),
+                                                        eq(userMedicalUnitScope.medicalUnitId, context.medicalUnitId),
+                                                        eq(userMedicalUnitScope.scopeId, scope.id)
+                                                    )
+                                                )
+                                        )
+                                    )
+                                )
+                            )
                             .limit(1);
+
                         hasPermission = result.length > 0;
                     }
+
+                    return ctx.json({ hasPermission });
+                }
+            ),
+
+            // Check Multiple Permissions with AND/OR logic
+            checkPermissions: createAuthEndpoint(
+                "/permissions/check-multiple",
+                {
+                    method: "POST",
+                    body: z.object({
+                        userId: z.string(),
+                        expression: z.union([
+                            z.object({ and: z.array(z.string()) }),
+                            z.object({ or: z.array(z.string()) }),
+                        ]),
+                        context: z.union([
+                            z.object({ type: z.literal("organization"), organizationId: z.string() }),
+                            z.object({ type: z.literal("team"), teamId: z.string() }),
+                            z.object({ type: z.literal("medicalUnit"), medicalUnitId: z.string() }),
+                        ]),
+                    }),
+                },
+                async (ctx) => {
+                    // @ts-ignore - Better Auth adapter.db is not typed but exists at runtime
+                    const db = ctx.context.adapter.db;
+                    const { userId, expression, context } = ctx.body;
+
+                    // Determine if AND or OR
+                    const isAndLogic = 'and' in expression;
+                    const scopeNames = isAndLogic
+                        ? (expression as { and: string[] }).and
+                        : (expression as { or: string[] }).or;
+
+                    // Helper function to check a single scope
+                    const checkSingleScope = async (scopeName: string): Promise<boolean> => {
+                        if (context.type === "organization") {
+                            const result = await db
+                                .selectDistinct({ scopeName: scope.name })
+                                .from(scope)
+                                .where(
+                                    and(
+                                        eq(scope.name, scopeName),
+                                        or(
+                                            // Scopes from assigned groups
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userOrganizationScopeGroup)
+                                                    .innerJoin(
+                                                        scopeGroupScope,
+                                                        eq(userOrganizationScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                    )
+                                                    .where(
+                                                        and(
+                                                            eq(userOrganizationScopeGroup.userId, userId),
+                                                            eq(userOrganizationScopeGroup.organizationId, context.organizationId),
+                                                            eq(scopeGroupScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            ),
+                                            // Individual scopes
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userOrganizationScope)
+                                                    .where(
+                                                        and(
+                                                            eq(userOrganizationScope.userId, userId),
+                                                            eq(userOrganizationScope.organizationId, context.organizationId),
+                                                            eq(userOrganizationScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            )
+                                        )
+                                    )
+                                )
+                                .limit(1);
+                            return result.length > 0;
+                        } else if (context.type === "team") {
+                            const result = await db
+                                .selectDistinct({ scopeName: scope.name })
+                                .from(scope)
+                                .where(
+                                    and(
+                                        eq(scope.name, scopeName),
+                                        or(
+                                            // Scopes from assigned groups
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userTeamScopeGroup)
+                                                    .innerJoin(
+                                                        scopeGroupScope,
+                                                        eq(userTeamScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                    )
+                                                    .where(
+                                                        and(
+                                                            eq(userTeamScopeGroup.userId, userId),
+                                                            eq(userTeamScopeGroup.teamId, context.teamId),
+                                                            eq(scopeGroupScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            ),
+                                            // Individual scopes
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userTeamScope)
+                                                    .where(
+                                                        and(
+                                                            eq(userTeamScope.userId, userId),
+                                                            eq(userTeamScope.teamId, context.teamId),
+                                                            eq(userTeamScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            )
+                                        )
+                                    )
+                                )
+                                .limit(1);
+                            return result.length > 0;
+                        } else if (context.type === "medicalUnit") {
+                            const result = await db
+                                .selectDistinct({ scopeName: scope.name })
+                                .from(scope)
+                                .where(
+                                    and(
+                                        eq(scope.name, scopeName),
+                                        or(
+                                            // Scopes from assigned groups
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userMedicalUnitScopeGroup)
+                                                    .innerJoin(
+                                                        scopeGroupScope,
+                                                        eq(userMedicalUnitScopeGroup.scopeGroupId, scopeGroupScope.scopeGroupId)
+                                                    )
+                                                    .where(
+                                                        and(
+                                                            eq(userMedicalUnitScopeGroup.userId, userId),
+                                                            eq(userMedicalUnitScopeGroup.medicalUnitId, context.medicalUnitId),
+                                                            eq(scopeGroupScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            ),
+                                            // Individual scopes
+                                            db.$exists(
+                                                db.select()
+                                                    .from(userMedicalUnitScope)
+                                                    .where(
+                                                        and(
+                                                            eq(userMedicalUnitScope.userId, userId),
+                                                            eq(userMedicalUnitScope.medicalUnitId, context.medicalUnitId),
+                                                            eq(userMedicalUnitScope.scopeId, scope.id)
+                                                        )
+                                                    )
+                                            )
+                                        )
+                                    )
+                                )
+                                .limit(1);
+                            return result.length > 0;
+                        }
+                        return false;
+                    };
+
+                    // Check all scopes
+                    const results = await Promise.all(
+                        scopeNames.map(scopeName => checkSingleScope(scopeName))
+                    );
+
+                    // Apply AND or OR logic
+                    const hasPermission = isAndLogic
+                        ? results.every(r => r === true)  // AND: all must be true
+                        : results.some(r => r === true);   // OR: at least one must be true
 
                     return ctx.json({ hasPermission });
                 }

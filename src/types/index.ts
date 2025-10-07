@@ -8,6 +8,11 @@ export type PermissionContext =
     | { type: 'team'; teamId: string }
     | { type: 'medicalUnit'; medicalUnitId: string };
 
+// Permission expression for logical evaluation
+export type PermissionExpression =
+    | { and: string[] }  // All scopes must be present
+    | { or: string[] };  // At least one scope must be present
+
 // Scope definition
 export interface Scope {
     id: string;

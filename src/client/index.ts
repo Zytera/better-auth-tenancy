@@ -1,6 +1,6 @@
 import type { BetterAuthClientPlugin } from "better-auth/client";
 import type { permissionsPlugin } from "../server";
-import type { PermissionContext } from "../types";
+import type { PermissionContext, PermissionExpression } from "../types";
 
 // ============================================================================
 // CLIENT PLUGIN FOR BETTER AUTH PERMISSIONS
@@ -127,6 +127,17 @@ export const permissionsClient = () => {
                 context: PermissionContext;
             }) => {
                 return await $fetch("/permissions/check", {
+                    method: "POST",
+                    body: params,
+                });
+            },
+
+            checkPermissions: async (params: {
+                userId: string;
+                expression: PermissionExpression;
+                context: PermissionContext;
+            }) => {
+                return await $fetch("/permissions/check-multiple", {
                     method: "POST",
                     body: params,
                 });
