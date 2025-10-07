@@ -59,5 +59,9 @@
   },
   "bugs": {
     "url": "https://github.com/Zytera/better-auth-permissions/issues"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   }
 }

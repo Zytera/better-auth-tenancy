@@ -1,0 +1,5 @@
+# Configuration to install packages from GitHub Packages
+# Copy this file to .npmrc and replace YOUR_GITHUB_TOKEN with your personal access token
+
+@zytera:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
