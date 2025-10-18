@@ -1,0 +1,670 @@
+import { z } from 'zod'
+import { createAuthEndpoint, APIError } from 'better-auth/api'
+import type { Adapter } from 'better-auth'
+import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
+import type { ContextType } from '../types/context'
+import type { TenancyConfig } from '../types/config'
+import { applyEndpointAuth } from './middleware'
+
+export type Member = OrganizationMember | TeamMember | SubteamMember
+
+export interface AddMemberInput {
+  userId: string
+  contextType: ContextType
+  contextId: string
+  roleId?: string
+  addedBy: string
+  metadata?: Record<string, unknown>
+}
+
+export interface UpdateMemberRoleInput {
+  userId: string
+  contextType: ContextType
+  contextId: string
+  roleId: string | null
+  updatedBy: string
+}
+
+export const memberEndpoints = (config?: TenancyConfig) => ({
+  addMember: createAuthEndpoint(
+    '/member/add',
+    {
+      method: 'POST',
+      body: z.object({
+        userId: z.string(),
+        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextId: z.string(),
+        roleId: z.string().optional(),
+        addedBy: z.string(),
+        metadata: z.record(z.unknown()).optional(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Add member',
+          description: 'Add a member to a context',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.add, ctx)
+
+      const { userId, contextType, contextId, roleId, addedBy, metadata } = ctx.body
+
+      // Check limits
+      if (config?.limits) {
+        const model = contextType === 'organization' ? 'organizationMember' : contextType === 'team' ? 'teamMember' : 'subteamMember'
+        const field = contextType === 'organization' ? 'organizationId' : contextType === 'team' ? 'teamId' : 'subteamId'
+        const allMembers = await ctx.context.adapter.findMany({
+          model,
+          where: [{ field, value: contextId }],
+        }) as Member[]
+        const limit = config.limits.maxMembersPerOrganization
+        if (limit && allMembers.length >= limit) {
+          throw new APIError('BAD_REQUEST', { message: 'Member limit reached' })
+        }
+      }
+
+      let member: Member
+
+      switch (contextType) {
+        case 'organization':
+          member = await ctx.context.adapter.create({
+            model: 'organizationMember',
+            data: {
+              organizationId: contextId,
+              userId,
+              roleId: roleId || null,
+              metadata,
+            },
+          }) as OrganizationMember
+          break
+        case 'team':
+          member = await ctx.context.adapter.create({
+            model: 'teamMember',
+            data: {
+              teamId: contextId,
+              userId,
+              roleId: roleId || null,
+              metadata,
+            },
+          }) as TeamMember
+          break
+        case 'subteam':
+          member = await ctx.context.adapter.create({
+            model: 'subteamMember',
+            data: {
+              subteamId: contextId,
+              userId,
+              roleId: roleId || null,
+              metadata,
+            },
+          }) as SubteamMember
+          break
+      }
+
+      if (config?.audit?.onMemberAdded) {
+        await config.audit.onMemberAdded({
+          userId,
+          contextType,
+          contextId,
+          roleId,
+          addedBy,
+          timestamp: new Date(),
+        })
+      }
+
+      return ctx.json(member, { status: 201 })
+    }
+  ),
+
+  getMember: createAuthEndpoint(
+    '/member/:id',
+    {
+      method: 'GET',
+      params: z.object({ id: z.string() }),
+      metadata: {
+        openapi: {
+          summary: 'Get member',
+          description: 'Get member by ID',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+
+      const { id } = ctx.params
+
+      // Try each type until we find it
+      const orgMember = await ctx.context.adapter.findOne({
+        model: 'organizationMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as OrganizationMember | null
+      if (orgMember) return ctx.json(orgMember)
+
+      const teamMember = await ctx.context.adapter.findOne({
+        model: 'teamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as TeamMember | null
+      if (teamMember) return ctx.json(teamMember)
+
+      const subteamMember = await ctx.context.adapter.findOne({
+        model: 'subteamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as SubteamMember | null
+      if (subteamMember) return ctx.json(subteamMember)
+
+      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+    }
+  ),
+
+  updateMemberRole: createAuthEndpoint(
+    '/member/:id/role',
+    {
+      method: 'PATCH',
+      params: z.object({ id: z.string() }),
+      body: z.object({
+        roleId: z.string(),
+        updatedBy: z.string(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Update member role',
+          description: 'Update a member\'s role',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
+
+      const { id } = ctx.params
+      const { roleId, updatedBy } = ctx.body
+
+      // Try to find the member
+      let existing: Member | null = null
+      let memberType: 'organization' | 'team' | 'subteam' | null = null
+
+      const orgMember = await ctx.context.adapter.findOne({
+        model: 'organizationMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as OrganizationMember | null
+      if (orgMember) {
+        existing = orgMember
+        memberType = 'organization'
+      }
+
+      if (!existing) {
+        const teamMember = await ctx.context.adapter.findOne({
+          model: 'teamMember',
+          where: [{ field: 'id', value: id }],
+        }).catch(() => null) as TeamMember | null
+        if (teamMember) {
+          existing = teamMember
+          memberType = 'team'
+        }
+      }
+
+      if (!existing) {
+        const subteamMember = await ctx.context.adapter.findOne({
+          model: 'subteamMember',
+          where: [{ field: 'id', value: id }],
+        }).catch(() => null) as SubteamMember | null
+        if (subteamMember) {
+          existing = subteamMember
+          memberType = 'subteam'
+        }
+      }
+
+      if (!existing || !memberType) {
+        throw new APIError('NOT_FOUND', { message: 'Member not found' })
+      }
+
+      const oldRoleId = existing.roleId
+      let updated: Member
+
+      if (memberType === 'organization') {
+        updated = await ctx.context.adapter.update({
+          model: 'organizationMember',
+          where: [{ field: 'id', value: id }],
+          update: { roleId },
+        }) as OrganizationMember
+      } else if (memberType === 'team') {
+        updated = await ctx.context.adapter.update({
+          model: 'teamMember',
+          where: [{ field: 'id', value: id }],
+          update: { roleId },
+        }) as TeamMember
+      } else {
+        updated = await ctx.context.adapter.update({
+          model: 'subteamMember',
+          where: [{ field: 'id', value: id }],
+          update: { roleId },
+        }) as SubteamMember
+      }
+
+      if (config?.audit?.onRoleChanged) {
+        const contextId = 'organizationId' in existing ? existing.organizationId : 'teamId' in existing ? existing.teamId : (existing as SubteamMember).subteamId
+        await config.audit.onRoleChanged({
+          userId: existing.userId,
+          contextType: memberType,
+          contextId,
+          oldRoleId: oldRoleId ?? null,
+          newRoleId: roleId,
+          changedBy: updatedBy,
+          timestamp: new Date(),
+        })
+      }
+
+      return ctx.json(updated)
+    }
+  ),
+
+  updateMemberMetadata: createAuthEndpoint(
+    '/member/:id/metadata',
+    {
+      method: 'PATCH',
+      params: z.object({ id: z.string() }),
+      body: z.object({
+        metadata: z.record(z.unknown()),
+        updatedBy: z.string(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Update member metadata',
+          description: 'Update a member\'s metadata',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
+
+      const { id } = ctx.params
+      const { metadata } = ctx.body
+
+      // Try to find and update the member
+      const orgMember = await ctx.context.adapter.findOne({
+        model: 'organizationMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as OrganizationMember | null
+      if (orgMember) {
+        const updated = await ctx.context.adapter.update({
+          model: 'organizationMember',
+          where: [{ field: 'id', value: id }],
+          update: { metadata },
+        }) as OrganizationMember
+        return ctx.json(updated)
+      }
+
+      const teamMember = await ctx.context.adapter.findOne({
+        model: 'teamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as TeamMember | null
+      if (teamMember) {
+        const updated = await ctx.context.adapter.update({
+          model: 'teamMember',
+          where: [{ field: 'id', value: id }],
+          update: { metadata },
+        }) as TeamMember
+        return ctx.json(updated)
+      }
+
+      const subteamMember = await ctx.context.adapter.findOne({
+        model: 'subteamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as SubteamMember | null
+      if (subteamMember) {
+        const updated = await ctx.context.adapter.update({
+          model: 'subteamMember',
+          where: [{ field: 'id', value: id }],
+          update: { metadata },
+        }) as SubteamMember
+        return ctx.json(updated)
+      }
+
+      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+    }
+  ),
+
+  removeMember: createAuthEndpoint(
+    '/member/:id',
+    {
+      method: 'DELETE',
+      params: z.object({ id: z.string() }),
+      body: z.object({ removedBy: z.string() }),
+      metadata: {
+        openapi: {
+          summary: 'Remove member',
+          description: 'Remove a member from a context',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.remove, ctx)
+
+      const { id } = ctx.params
+      const { removedBy } = ctx.body
+
+      // Try to find the member
+      const orgMember = await ctx.context.adapter.findOne({
+        model: 'organizationMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as OrganizationMember | null
+      if (orgMember) {
+        await ctx.context.adapter.delete({
+          model: 'organizationMember',
+          where: [{ field: 'id', value: id }],
+        })
+        if (config?.audit?.onMemberRemoved) {
+          await config.audit.onMemberRemoved({
+            userId: orgMember.userId,
+            contextType: 'organization',
+            contextId: orgMember.organizationId,
+            removedBy,
+            timestamp: new Date(),
+          })
+        }
+        return ctx.json(null, { status: 204 })
+      }
+
+      const teamMember = await ctx.context.adapter.findOne({
+        model: 'teamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as TeamMember | null
+      if (teamMember) {
+        await ctx.context.adapter.delete({
+          model: 'teamMember',
+          where: [{ field: 'id', value: id }],
+        })
+        if (config?.audit?.onMemberRemoved) {
+          await config.audit.onMemberRemoved({
+            userId: teamMember.userId,
+            contextType: 'team',
+            contextId: teamMember.teamId,
+            removedBy,
+            timestamp: new Date(),
+          })
+        }
+        return ctx.json(null, { status: 204 })
+      }
+
+      const subteamMember = await ctx.context.adapter.findOne({
+        model: 'subteamMember',
+        where: [{ field: 'id', value: id }],
+      }).catch(() => null) as SubteamMember | null
+      if (subteamMember) {
+        await ctx.context.adapter.delete({
+          model: 'subteamMember',
+          where: [{ field: 'id', value: id }],
+        })
+        if (config?.audit?.onMemberRemoved) {
+          await config.audit.onMemberRemoved({
+            userId: subteamMember.userId,
+            contextType: 'subteam',
+            contextId: subteamMember.subteamId,
+            removedBy,
+            timestamp: new Date(),
+          })
+        }
+        return ctx.json(null, { status: 204 })
+      }
+
+      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+    }
+  ),
+
+  listMembers: createAuthEndpoint(
+    '/member/list/:contextType/:contextId',
+    {
+      method: 'GET',
+      params: z.object({
+        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextId: z.string(),
+      }),
+      query: z.object({
+        limit: z.coerce.number().min(1).max(100).optional(),
+        offset: z.coerce.number().min(0).optional(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'List members',
+          description: 'List all members in a context',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+
+      const { contextType, contextId } = ctx.params
+      const { limit, offset } = ctx.query
+
+      let items: Member[] = []
+      switch (contextType) {
+        case 'organization':
+          items = await ctx.context.adapter.findMany({
+            model: 'organizationMember',
+            where: [{ field: 'organizationId', value: contextId }],
+          }) as OrganizationMember[]
+          break
+        case 'team':
+          items = await ctx.context.adapter.findMany({
+            model: 'teamMember',
+            where: [{ field: 'teamId', value: contextId }],
+          }) as TeamMember[]
+          break
+        case 'subteam':
+          items = await ctx.context.adapter.findMany({
+            model: 'subteamMember',
+            where: [{ field: 'subteamId', value: contextId }],
+          }) as SubteamMember[]
+          break
+      }
+
+      const total = items.length
+      if (offset) items = items.slice(offset)
+      if (limit) items = items.slice(0, limit)
+
+      return ctx.json({ items, total })
+    }
+  ),
+
+  getUserMemberships: createAuthEndpoint(
+    '/member/user/:userId',
+    {
+      method: 'GET',
+      params: z.object({ userId: z.string() }),
+      query: z.object({
+        contextType: z.enum(['organization', 'team', 'subteam']).optional(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Get user memberships',
+          description: 'Get all memberships for a user',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+
+      const { userId } = ctx.params
+      const { contextType } = ctx.query
+
+      if (contextType) {
+        switch (contextType) {
+          case 'organization':
+            const orgs = await ctx.context.adapter.findMany({
+              model: 'organizationMember',
+              where: [{ field: 'userId', value: userId }],
+            }) as OrganizationMember[]
+            return ctx.json(orgs)
+          case 'team':
+            const teams = await ctx.context.adapter.findMany({
+              model: 'teamMember',
+              where: [{ field: 'userId', value: userId }],
+            }) as TeamMember[]
+            return ctx.json(teams)
+          case 'subteam':
+            const subteams = await ctx.context.adapter.findMany({
+              model: 'subteamMember',
+              where: [{ field: 'userId', value: userId }],
+            }) as SubteamMember[]
+            return ctx.json(subteams)
+        }
+      }
+
+      const orgs = await ctx.context.adapter.findMany({
+        model: 'organizationMember',
+        where: [{ field: 'userId', value: userId }],
+      }) as OrganizationMember[]
+      const teams = await ctx.context.adapter.findMany({
+        model: 'teamMember',
+        where: [{ field: 'userId', value: userId }],
+      }) as TeamMember[]
+      const subteams = await ctx.context.adapter.findMany({
+        model: 'subteamMember',
+        where: [{ field: 'userId', value: userId }],
+      }) as SubteamMember[]
+
+      return ctx.json([...orgs, ...teams, ...subteams])
+    }
+  ),
+
+  checkMembership: createAuthEndpoint(
+    '/member/check',
+    {
+      method: 'POST',
+      body: z.object({
+        userId: z.string(),
+        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextId: z.string(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Check membership',
+          description: 'Check if user is a member of a context',
+        },
+      },
+    },
+    async (ctx) => {
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+
+      const { userId, contextType, contextId } = ctx.body
+
+      let member: Member | null = null
+      switch (contextType) {
+        case 'organization': {
+          const members = await ctx.context.adapter.findMany({
+            model: 'organizationMember',
+            where: [
+              { field: 'userId', value: userId },
+              { field: 'organizationId', value: contextId },
+            ],
+          }) as OrganizationMember[]
+          member = members[0] || null
+          break
+        }
+        case 'team': {
+          const members = await ctx.context.adapter.findMany({
+            model: 'teamMember',
+            where: [
+              { field: 'userId', value: userId },
+              { field: 'teamId', value: contextId },
+            ],
+          }) as TeamMember[]
+          member = members[0] || null
+          break
+        }
+        case 'subteam': {
+          const members = await ctx.context.adapter.findMany({
+            model: 'subteamMember',
+            where: [
+              { field: 'userId', value: userId },
+              { field: 'subteamId', value: contextId },
+            ],
+          }) as SubteamMember[]
+          member = members[0] || null
+          break
+        }
+      }
+
+      return ctx.json({ isMember: member !== null })
+    }
+  ),
+})
+
+// Helper function for other modules
+export async function _addMember(
+  adapter: Adapter,
+  input: AddMemberInput,
+  config?: TenancyConfig
+): Promise<Member> {
+  if (config?.limits) {
+    const model = input.contextType === 'organization' ? 'organizationMember' : input.contextType === 'team' ? 'teamMember' : 'subteamMember'
+    const field = input.contextType === 'organization' ? 'organizationId' : input.contextType === 'team' ? 'teamId' : 'subteamId'
+    const allMembers = await adapter.findMany({
+      model,
+      where: [{ field, value: input.contextId }],
+    }) as Member[]
+    const limit = config.limits.maxMembersPerOrganization
+    if (limit && allMembers.length >= limit) {
+      throw new Error('Member limit reached')
+    }
+  }
+
+  let member: Member
+
+  switch (input.contextType) {
+    case 'organization':
+      member = await adapter.create({
+        model: 'organizationMember',
+        data: {
+          organizationId: input.contextId,
+          userId: input.userId,
+          roleId: input.roleId || null,
+          metadata: input.metadata,
+        },
+      }) as OrganizationMember
+      break
+    case 'team':
+      member = await adapter.create({
+        model: 'teamMember',
+        data: {
+          teamId: input.contextId,
+          userId: input.userId,
+          roleId: input.roleId || null,
+          metadata: input.metadata,
+        },
+      }) as TeamMember
+      break
+    case 'subteam':
+      member = await adapter.create({
+        model: 'subteamMember',
+        data: {
+          subteamId: input.contextId,
+          userId: input.userId,
+          roleId: input.roleId || null,
+          metadata: input.metadata,
+        },
+      }) as SubteamMember
+      break
+  }
+
+  if (config?.audit?.onMemberAdded) {
+    await config.audit.onMemberAdded({
+      userId: input.userId,
+      contextType: input.contextType,
+      contextId: input.contextId,
+      roleId: input.roleId,
+      addedBy: input.addedBy,
+      timestamp: new Date(),
+    })
+  }
+
+  return member
+}

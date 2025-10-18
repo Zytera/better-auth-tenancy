@@ -1,55 +1,127 @@
-// ============================================================================
-// TYPES FOR PERMISSIONS PLUGIN
-// ============================================================================
+/**
+ * Better Auth Tenancy - TypeScript Types
+ *
+ * This file exports all TypeScript types for the Better Auth Tenancy plugin.
+ * Types are organized into logical groups:
+ *
+ * 1. Configuration: Plugin configuration and setup
+ * 2. Context: Hierarchical context types
+ * 3. Events: Audit event types
+ * 4. Hooks: Cache and audit hooks
+ * 5. Statements: Permission statement types
+ * 6. Roles: Custom role types
+ * 7. Invitations: Invitation system types
+ */
 
-// Context for permission checks
-export type PermissionContext =
-    | { type: 'organization'; organizationId: string }
-    | { type: 'team'; teamId: string }
-    | { type: 'medicalUnit'; medicalUnitId: string };
+// Configuration
+export type {
+  TenancyConfig,
+  EndpointConfig,
+  HierarchyLimits,
+  I18nConfig,
+  InvitationConfig,
+} from './config'
 
-// Permission expression for logical evaluation
-export type PermissionExpression =
-    | { and: string[] }  // All scopes must be present
-    | { or: string[] };  // At least one scope must be present
+// Context
+export type {
+  ContextType,
+  Context,
+  PermissionContext,
+  HierarchicalContext,
+  ContextWithMetadata,
+  OrganizationContext,
+  TeamContext,
+  SubteamContext,
+  TypedContext,
+  ContextResolution,
+  ContextValidation,
+} from './context'
 
-// Scope definition
-export interface Scope {
-    id: string;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-}
+// Events
+export type {
+  BaseEvent,
+  EntityType,
+  RoleChangedEvent,
+  PermissionGrantedEvent,
+  PermissionDeniedEvent,
+  PermissionRevokedEvent,
+  EntityCreatedEvent,
+  EntityUpdatedEvent,
+  EntityDeletedEvent,
+  MemberAddedEvent,
+  MemberRemovedEvent,
+  InvitationCreatedEvent,
+  InvitationAcceptedEvent,
+  InvitationRejectedEvent,
+  InvitationCancelledEvent,
+  RoleStatementAddedEvent,
+  RoleStatementRemovedEvent,
+  AuditHooks,
+  AuditEvent,
+} from './events'
 
-// Scope group definition
-export interface ScopeGroup {
-    id: string;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-}
+// Hooks
+export type {
+  CacheHooks,
+  CacheManagerOptions,
+} from './hooks'
 
-// Medical unit definition
-export interface MedicalUnit {
-    id: string;
-    name: string;
-    teamId: string;
-    metadata?: string;
-    createdAt: Date;
-    updatedAt: Date;
-}
+export {
+  CacheKeyPatterns,
+  CacheTTL,
+} from './hooks'
 
-// Translation interfaces
-export interface ScopeTranslation {
-    scopeId: string;
-    language: string;
-    name: string;
-    description?: string;
-}
+// Statements
+export type {
+  StatementId,
+  StatementCategory,
+  StatementOperation,
+  ParsedStatement,
+  StatementWithTranslations,
+  StatementTranslationMap,
+  StatementTranslationData,
+  StatementValidation,
+  CreateStatementInput,
+  StatementTranslationInput,
+  UpdateStatementInput,
+} from './statement'
 
-export interface ScopeGroupTranslation {
-    scopeGroupId: string;
-    language: string;
-    name: string;
-    description?: string;
-}
+export {
+  CommonStatementCategories,
+  CommonStatementOperations,
+  buildStatementId,
+  parseStatementId,
+  validateStatementId,
+} from './statement'
+
+// Roles
+export type {
+  RoleType,
+  RoleWithStatements,
+  RoleSummary,
+  CreateRoleInput,
+  UpdateRoleInput,
+  AddStatementsToRoleInput,
+  RemoveStatementsFromRoleInput,
+  RoleAssignment,
+  RoleValidation,
+  RoleConflict,
+  RoleQueryOptions,
+  RolePermissionsSummary,
+} from './role'
+
+// Invitations
+export type {
+  InvitationStatus,
+  InvitationWithDetails,
+  InvitationSummary,
+  CreateInvitationInput,
+  AcceptInvitationInput,
+  RejectInvitationInput,
+  CancelInvitationInput,
+  InvitationValidation,
+  InvitationQueryOptions,
+  InvitationStatistics,
+  BulkInvitationInput,
+  BulkInvitationResult,
+} from './invitation'

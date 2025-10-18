@@ -1,67 +1,59 @@
 {
-  "name": "@zytera/better-auth-permissions",
-  "version": "1.0.0",
-  "description": "Multi-level permissions plugin for Better Auth with organization, team, and medical unit scopes",
+  "name": "@zytera/better-auth-tenancy",
+  "version": "0.0.1",
+  "description": "Multi-tenant organizations with hierarchical RBAC for Better Auth - complete workspace management with teams, roles, and permissions",
   "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "type": "module",
   "exports": {
-    ".": {
+    "./server": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     },
     "./client": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.js"
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.mjs",
+      "require": "./dist/client/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
+  "packageManager": "bun@1.1.38",
   "scripts": {
-    "build": "bun build:types && bun build:esm",
-    "build:types": "tsc --emitDeclarationOnly --outDir dist",
-    "build:esm": "bun build src/index.ts --outdir dist --target=node --format=esm",
-    "dev": "bun build --watch",
-    "prepublishOnly": "bun run build"
+    "build": "bun run tsup",
+    "dev": "bun run tsup --watch",
+    "typecheck": "bun run tsc --noEmit",
+    "lint": "bun run eslint src",
+    "test": "bun test"
   },
   "keywords": [
     "better-auth",
+    "auth",
+    "authorization",
     "permissions",
     "rbac",
-    "scopes",
-    "authorization",
+    "access-control",
+    "organizations",
+    "teams",
     "multi-tenant",
-    "organization",
-    "medical",
-    "hospital"
+    "tenancy",
+    "workspace",
+    "saas"
   ],
   "author": "Zytera",
   "license": "MIT",
   "peerDependencies": {
-    "better-auth": "^1.3.0"
-  },
-  "dependencies": {
-    "zod": "^3.25.0"
+    "better-auth": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "better-auth": "^1.3.0",
-    "drizzle-orm": "^0.44.0",
-    "typescript": "^5.3.0"
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Zytera/better-auth-permissions"
-  },
-  "bugs": {
-    "url": "https://github.com/Zytera/better-auth-permissions/issues"
-  },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+  "dependencies": {
+    "zod": "^3.23.0"
   }
 }
