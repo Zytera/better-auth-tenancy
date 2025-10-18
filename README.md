@@ -187,15 +187,19 @@ Example: User is `admin` of Team "Engineering" but `member` of Subteam "DevOps":
 
 ### Database Design
 
-Uses Better Auth's native schema system with polymorphic relationships:
+Uses Better Auth's native schema system:
 
 ```typescript
-// Supports any Better Auth database adapter (Prisma, Drizzle, Kysely, etc.)
+// Works with any Better Auth database adapter
 export const auth = betterAuth({
-  database: yourAdapter, // Works with any adapter
-  plugins: [tenancy()]
+  database: yourAdapter, // Prisma, Drizzle, Kysely, MongoDB, etc.
+  plugins: [
+    tenancy()  // Automatically creates 15 tables
+  ]
 })
 ```
+
+Better Auth handles table creation automatically - no manual migrations needed.
 
 ## 📦 Installation
 
@@ -303,9 +307,9 @@ export const auth = betterAuth({
 })
 ```
 
-### 2. Run Database Migrations
+### 2. Database Tables
 
-Better Auth will automatically create the required tables on first run.
+Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on first run. No manual migrations needed.
 
 ### 3. Create Your First Organization
 
@@ -586,32 +590,34 @@ DELETE /permission/cleanup/:contextType/:contextId
 
 ## 🗄️ Database Schema
 
-Better Auth Tenancy uses 15 tables managed by Better Auth:
+Better Auth Tenancy uses 15 tables:
 
 ### Core Tables
-- **auth_tenancy_organization** - Root entities
-- **auth_tenancy_team** - First-level grouping
-- **auth_tenancy_subteam** - Second-level grouping
+- `organization` - Root entities
+- `team` - First-level grouping
+- `subteam` - Second-level grouping
 
 ### Permission Tables
-- **auth_tenancy_statement** - Permission catalog
-- **auth_tenancy_statement_translation** - i18n support
-- **auth_tenancy_organization_role** - Organization roles
-- **auth_tenancy_organization_role_statement** - Role-statement mapping
-- **auth_tenancy_team_role** - Team roles
-- **auth_tenancy_team_role_statement** - Role-statement mapping
+- `statement` - Permission catalog
+- `statementTranslation` - i18n support
+- `organizationRole` - Organization roles
+- `organizationRoleStatement` - Role-statement mapping
+- `teamRole` - Team roles
+- `teamRoleStatement` - Role-statement mapping
 
 ### Member Tables
-- **auth_tenancy_organization_member** - Organization members
-- **auth_tenancy_team_member** - Team members
-- **auth_tenancy_subteam_member** - Subteam members
+- `organizationMember` - Organization members
+- `teamMember` - Team members
+- `subteamMember` - Subteam members
 
 ### Permission Override Tables
-- **auth_tenancy_permission_grant** - Explicit grants
-- **auth_tenancy_permission_deny** - Explicit denies
+- `permissionGrant` - Explicit grants
+- `permissionDeny` - Explicit denies
 
 ### Utility Tables
-- **auth_tenancy_invitation** - Invitation system
+- `invitation` - Invitation system
+
+Better Auth automatically creates these tables on first run.
 
 ## 💻 Client Usage
 
