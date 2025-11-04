@@ -1,0 +1,59 @@
+{
+  "name": "@zytera/better-auth-tenancy",
+  "version": "0.0.1",
+  "description": "Multi-tenant organizations with hierarchical RBAC for Better Auth - complete workspace management with teams, roles, and permissions",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./server": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "import": "./dist/client/index.mjs",
+      "require": "./dist/client/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "packageManager": "bun@1.1.38",
+  "scripts": {
+    "build": "bun run tsup",
+    "dev": "bun run tsup --watch",
+    "typecheck": "bun run tsc --noEmit",
+    "lint": "bun run eslint src",
+    "test": "bun test"
+  },
+  "keywords": [
+    "better-auth",
+    "auth",
+    "authorization",
+    "permissions",
+    "rbac",
+    "access-control",
+    "organizations",
+    "teams",
+    "multi-tenant",
+    "tenancy",
+    "workspace",
+    "saas"
+  ],
+  "author": "Zytera",
+  "license": "MIT",
+  "peerDependencies": {
+    "better-auth": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  }
+}
