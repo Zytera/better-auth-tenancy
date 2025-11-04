@@ -32,6 +32,7 @@
  * ```
  */
 
+import type { BetterAuthClientPlugin } from 'better-auth/client'
 import type { tenancy } from '../plugin'
 
 export interface TenancyClientConfig {
@@ -51,22 +52,20 @@ export interface TenancyClientConfig {
  * @param config - Optional client configuration
  * @returns BetterAuthClientPlugin
  */
-export function tenancyClient(config?: TenancyClientConfig) {
+export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlugin {
   const plugin: any = {
     id: 'better-auth-tenancy',
     $InferServerPlugin: {} as ReturnType<typeof tenancy>,
-  }
-
-  // Add Accept-Language header if locale is configured
-  if (config?.locale) {
-    plugin.fetchOptions = {
+    fetchOptions: {
+      // Include credentials (cookies) in all requests for authentication
+      credentials: 'include',
       headers: {
-        'Accept-Language': config.locale,
+        ...(config?.locale && { 'Accept-Language': config.locale }),
       },
-    }
+    },
   }
-  return plugin;
 
+  return plugin
 }
 
 // Export types for convenience
