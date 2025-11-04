@@ -73,6 +73,19 @@ export interface TenancyConfig {
 }
 
 /**
+ * Resource information for endpoints that operate on existing entities
+ * Automatically populated by the plugin before calling hooks
+ */
+export interface ResourceContext {
+  /** Context type (organization, team, or subteam) */
+  contextType: 'organization' | 'team' | 'subteam'
+  /** Context ID (organizationId, teamId, or subteamId) */
+  contextId: string
+  /** The resource data itself (member, role, permission, etc.) */
+  data?: any
+}
+
+/**
  * Context passed to endpoint authorization hooks
  */
 export interface EndpointAuthContext {
@@ -84,6 +97,8 @@ export interface EndpointAuthContext {
   params?: any
   /** Request query */
   query?: any
+  /** Resource context (automatically populated for read/update/delete operations) */
+  resource?: ResourceContext
 }
 
 /**
@@ -288,6 +303,11 @@ export interface InvitationConfig {
  * @example
  * ```typescript
  * permissionFiltering: {
+ *   filterOrganizations: async (userId, organizations, context) => {
+ *     // Custom logic: implement your own filtering based on business rules
+ *     // Example: filter by custom criteria, metadata, etc.
+ *     return organizations
+ *   },
  *   filterTeams: async (userId, teams, context) => {
  *     // Custom logic: only show teams where user has 'team:read' permission
  *     return teams.filter(async (team) => {
@@ -305,6 +325,22 @@ export interface InvitationConfig {
  * ```
  */
 export interface PermissionFilteringHooks {
+  /**
+   * Filter organizations list based on user permissions
+   *
+   * @param userId - The ID of the user requesting the list
+   * @param organizations - Array of organizations from the database
+   * @param context - Additional context (if any)
+   * @returns Promise<Array> - Filtered array of organizations the user can see
+   *
+   * If not provided, all organizations are returned (no filtering)
+   */
+  filterOrganizations?: <T>(
+    userId: string,
+    organizations: T[],
+    context?: Record<string, unknown>
+  ) => Promise<T[]>
+
   /**
    * Filter teams list based on user permissions
    *

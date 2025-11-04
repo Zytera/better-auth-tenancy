@@ -3,10 +3,63 @@ import { createAuthEndpoint, APIError } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
 import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
 import type { ContextType } from '../types/context'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth } from './middleware'
 
 export type Member = OrganizationMember | TeamMember | SubteamMember
+
+/**
+ * Find member and determine its context (organization, team, or subteam)
+ * This helper is used to enrich endpoint hooks with resource context
+ */
+export async function findMemberContext(
+  adapter: Adapter,
+  memberId: string
+): Promise<ResourceContext | null> {
+  // Try organizationMember
+  const orgMember = await adapter.findOne({
+    model: 'organizationMember',
+    where: [{ field: 'id', value: memberId }],
+  }).catch(() => null) as OrganizationMember | null
+
+  if (orgMember) {
+    return {
+      contextType: 'organization',
+      contextId: orgMember.organizationId,
+      data: orgMember,
+    }
+  }
+
+  // Try teamMember
+  const teamMember = await adapter.findOne({
+    model: 'teamMember',
+    where: [{ field: 'id', value: memberId }],
+  }).catch(() => null) as TeamMember | null
+
+  if (teamMember) {
+    return {
+      contextType: 'team',
+      contextId: teamMember.teamId,
+      data: teamMember,
+    }
+  }
+
+  // Try subteamMember
+  const subteamMember = await adapter.findOne({
+    model: 'subteamMember',
+    where: [{ field: 'id', value: memberId }],
+  }).catch(() => null) as SubteamMember | null
+
+  if (subteamMember) {
+    return {
+      contextType: 'subteam',
+      contextId: subteamMember.subteamId,
+      data: subteamMember,
+    }
+  }
+
+  return null
+}
 
 export interface AddMemberInput {
   userId: string
@@ -176,50 +229,23 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
-
       const { id } = ctx.params
       const { roleId, updatedBy } = ctx.body
 
-      // Try to find the member
-      let existing: Member | null = null
-      let memberType: 'organization' | 'team' | 'subteam' | null = null
-
-      const orgMember = await ctx.context.adapter.findOne({
-        model: 'organizationMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationMember | null
-      if (orgMember) {
-        existing = orgMember
-        memberType = 'organization'
-      }
-
-      if (!existing) {
-        const teamMember = await ctx.context.adapter.findOne({
-          model: 'teamMember',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as TeamMember | null
-        if (teamMember) {
-          existing = teamMember
-          memberType = 'team'
-        }
-      }
-
-      if (!existing) {
-        const subteamMember = await ctx.context.adapter.findOne({
-          model: 'subteamMember',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as SubteamMember | null
-        if (subteamMember) {
-          existing = subteamMember
-          memberType = 'subteam'
-        }
-      }
-
-      if (!existing || !memberType) {
+      // Find member and enrich context BEFORE calling hook
+      const resource = await findMemberContext(ctx.context.adapter, id)
+      if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Member not found' })
       }
+
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.member?.updateRole, {
+        ...ctx,
+        resource,
+      })
+
+      const existing = resource.data as Member
+      const memberType = resource.contextType
 
       const oldRoleId = existing.roleId
       let updated: Member
@@ -342,77 +368,49 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.remove, ctx)
-
       const { id } = ctx.params
       const { removedBy } = ctx.body
 
-      // Try to find the member
-      const orgMember = await ctx.context.adapter.findOne({
-        model: 'organizationMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationMember | null
-      if (orgMember) {
-        await ctx.context.adapter.delete({
-          model: 'organizationMember',
-          where: [{ field: 'id', value: id }],
-        })
-        if (config?.audit?.onMemberRemoved) {
-          await config.audit.onMemberRemoved({
-            userId: orgMember.userId,
-            contextType: 'organization',
-            contextId: orgMember.organizationId,
-            removedBy,
-            timestamp: new Date(),
-          })
-        }
-        return ctx.json(null, { status: 204 })
+      // Find member and enrich context BEFORE calling hook
+      const resource = await findMemberContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Member not found' })
       }
 
-      const teamMember = await ctx.context.adapter.findOne({
-        model: 'teamMember',
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.member?.remove, {
+        ...ctx,
+        resource,
+      })
+
+      const existing = resource.data as Member
+      const memberType = resource.contextType
+
+      // Delete member based on context type
+      const modelName =
+        memberType === 'organization'
+          ? 'organizationMember'
+          : memberType === 'team'
+            ? 'teamMember'
+            : 'subteamMember'
+
+      await ctx.context.adapter.delete({
+        model: modelName,
         where: [{ field: 'id', value: id }],
-      }).catch(() => null) as TeamMember | null
-      if (teamMember) {
-        await ctx.context.adapter.delete({
-          model: 'teamMember',
-          where: [{ field: 'id', value: id }],
+      })
+
+      // Trigger audit hook if configured
+      if (config?.audit?.onMemberRemoved) {
+        await config.audit.onMemberRemoved({
+          userId: existing.userId,
+          contextType: memberType,
+          contextId: resource.contextId,
+          removedBy,
+          timestamp: new Date(),
         })
-        if (config?.audit?.onMemberRemoved) {
-          await config.audit.onMemberRemoved({
-            userId: teamMember.userId,
-            contextType: 'team',
-            contextId: teamMember.teamId,
-            removedBy,
-            timestamp: new Date(),
-          })
-        }
-        return ctx.json(null, { status: 204 })
       }
 
-      const subteamMember = await ctx.context.adapter.findOne({
-        model: 'subteamMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as SubteamMember | null
-      if (subteamMember) {
-        await ctx.context.adapter.delete({
-          model: 'subteamMember',
-          where: [{ field: 'id', value: id }],
-        })
-        if (config?.audit?.onMemberRemoved) {
-          await config.audit.onMemberRemoved({
-            userId: subteamMember.userId,
-            contextType: 'subteam',
-            contextId: subteamMember.subteamId,
-            removedBy,
-            timestamp: new Date(),
-          })
-        }
-        return ctx.json(null, { status: 204 })
-      }
-
-      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+      return ctx.json(null, { status: 204 })
     }
   ),
 

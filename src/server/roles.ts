@@ -1,9 +1,49 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError } from 'better-auth/api'
+import type { Adapter } from 'better-auth'
 import type { OrganizationRole, TeamRole } from '../schema'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig, ResourceContext } from '../types/config'
 import type { StatementId } from '../types/statement'
 import { applyEndpointAuth } from './middleware'
+
+/**
+ * Find role and determine its context (organization or team)
+ * This helper is used to enrich endpoint hooks with resource context
+ */
+export async function findRoleContext(
+  adapter: Adapter,
+  roleId: string
+): Promise<ResourceContext | null> {
+  // Try organizationRole
+  const orgRole = await adapter.findOne({
+    model: 'organizationRole',
+    where: [{ field: 'id', value: roleId }],
+  }).catch(() => null) as OrganizationRole | null
+
+  if (orgRole) {
+    return {
+      contextType: 'organization',
+      contextId: orgRole.organizationId,
+      data: orgRole,
+    }
+  }
+
+  // Try teamRole
+  const teamRole = await adapter.findOne({
+    model: 'teamRole',
+    where: [{ field: 'id', value: roleId }],
+  }).catch(() => null) as TeamRole | null
+
+  if (teamRole) {
+    return {
+      contextType: 'team',
+      contextId: teamRole.teamId,
+      data: teamRole,
+    }
+  }
+
+  return null
+}
 
 export interface CreateRoleInput {
   contextType: 'organization' | 'team'
@@ -158,25 +198,21 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.read, ctx)
-
       const { id } = ctx.params
 
-      // Try both types until we find it
-      const orgRole = await ctx.context.adapter.findOne({
-        model: 'organizationRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationRole | null
-      if (orgRole) return ctx.json(orgRole)
+      // Find role and enrich context BEFORE calling hook
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+      }
 
-      const teamRole = await ctx.context.adapter.findOne({
-        model: 'teamRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as TeamRole | null
-      if (teamRole) return ctx.json(teamRole)
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.role?.read, {
+        ...ctx,
+        resource,
+      })
 
-      throw new APIError('NOT_FOUND', { message: 'Role not found' })
+      return ctx.json(resource.data)
     }
   ),
 
@@ -198,28 +234,24 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.update, ctx)
-
       const { id } = ctx.params
       const { name, description, updatedBy } = ctx.body
 
-      // Get current role
-      let current: OrganizationRole | TeamRole | null = null
-      current = await ctx.context.adapter.findOne({
-        model: 'organizationRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationRole | null
-      if (!current) {
-        current = await ctx.context.adapter.findOne({
-          model: 'teamRole',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as TeamRole | null
+      // Find role and enrich context BEFORE calling hook
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
-      if (!current) throw new APIError('NOT_FOUND', { message: 'Role not found' })
 
-      // Determine role type
-      const isOrgRole = 'organizationId' in current
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.role?.update, {
+        ...ctx,
+        resource,
+      })
+
+      const current = resource.data as OrganizationRole | TeamRole
+      const isOrgRole = resource.contextType === 'organization'
+
       const updated = await ctx.context.adapter.update({
         model: isOrgRole ? 'organizationRole' : 'teamRole',
         where: [{ field: 'id', value: id }],
@@ -263,27 +295,24 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.delete, ctx)
-
       const { id } = ctx.params
       const { deletedBy } = ctx.body
 
-      // Get role first
-      let role: OrganizationRole | TeamRole | null = null
-      role = await ctx.context.adapter.findOne({
-        model: 'organizationRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationRole | null
-      if (!role) {
-        role = await ctx.context.adapter.findOne({
-          model: 'teamRole',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as TeamRole | null
+      // Find role and enrich context BEFORE calling hook
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
-      if (!role) throw new APIError('NOT_FOUND', { message: 'Role not found' })
 
-      const isOrgRole = 'organizationId' in role
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.role?.delete, {
+        ...ctx,
+        resource,
+      })
+
+      const role = resource.data as OrganizationRole | TeamRole
+      const isOrgRole = resource.contextType === 'organization'
+
       await ctx.context.adapter.delete({
         model: isOrgRole ? 'organizationRole' : 'teamRole',
         where: [{ field: 'id', value: id }],
@@ -362,27 +391,24 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.addStatement, ctx)
-
       const { id } = ctx.params
       const { statementId, addedBy } = ctx.body
 
-      // Get role first
-      let role: OrganizationRole | TeamRole | null = null
-      role = await ctx.context.adapter.findOne({
-        model: 'organizationRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationRole | null
-      if (!role) {
-        role = await ctx.context.adapter.findOne({
-          model: 'teamRole',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as TeamRole | null
+      // Find role and enrich context BEFORE calling hook
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
-      if (!role) throw new APIError('NOT_FOUND', { message: 'Role not found' })
 
-      const isOrgRole = 'organizationId' in role
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.role?.addStatement, {
+        ...ctx,
+        resource,
+      })
+
+      const role = resource.data as OrganizationRole | TeamRole
+      const isOrgRole = resource.contextType === 'organization'
+
       await ctx.context.adapter.create({
         model: isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement',
         data: {
@@ -392,14 +418,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       })
 
       if (config?.audit?.onRoleStatementAdded) {
-        const contextType = isOrgRole ? 'organization' : 'team'
-        const contextId = isOrgRole ? (role as OrganizationRole).organizationId : (role as TeamRole).teamId
         await config.audit.onRoleStatementAdded({
           roleId: id,
           roleName: role.name,
           statementId,
-          contextType,
-          contextId,
+          contextType: resource.contextType as 'organization' | 'team',
+          contextId: resource.contextId,
           addedBy,
           timestamp: new Date(),
         })
@@ -426,27 +450,24 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.removeStatement, ctx)
-
       const { id, statementId } = ctx.params
       const { removedBy } = ctx.body
 
-      // Get role first
-      let role: OrganizationRole | TeamRole | null = null
-      role = await ctx.context.adapter.findOne({
-        model: 'organizationRole',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationRole | null
-      if (!role) {
-        role = await ctx.context.adapter.findOne({
-          model: 'teamRole',
-          where: [{ field: 'id', value: id }],
-        }).catch(() => null) as TeamRole | null
+      // Find role and enrich context BEFORE calling hook
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
-      if (!role) throw new APIError('NOT_FOUND', { message: 'Role not found' })
 
-      const isOrgRole = 'organizationId' in role
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.role?.removeStatement, {
+        ...ctx,
+        resource,
+      })
+
+      const role = resource.data as OrganizationRole | TeamRole
+      const isOrgRole = resource.contextType === 'organization'
+
       await ctx.context.adapter.delete({
         model: isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement',
         where: [
@@ -456,14 +477,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       })
 
       if (config?.audit?.onRoleStatementRemoved) {
-        const contextType = isOrgRole ? 'organization' : 'team'
-        const contextId = isOrgRole ? (role as OrganizationRole).organizationId : (role as TeamRole).teamId
         await config.audit.onRoleStatementRemoved({
           roleId: id,
           roleName: role.name,
           statementId,
-          contextType,
-          contextId,
+          contextType: resource.contextType as 'organization' | 'team',
+          contextId: resource.contextId,
           removedBy,
           timestamp: new Date(),
         })

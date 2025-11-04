@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError } from 'better-auth/api'
+import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth } from './middleware'
 import { _addMember } from './members'
 import {
@@ -12,6 +13,30 @@ import {
   canUseInvitation,
   calculateExpirationDate,
 } from '../utils/invitation-helper'
+
+/**
+ * Find invitation and determine its context
+ * This helper is used to enrich endpoint hooks with resource context
+ */
+export async function findInvitationContext(
+  adapter: Adapter,
+  token: string
+): Promise<ResourceContext | null> {
+  const invitation = await adapter.findOne({
+    model: 'invitation',
+    where: [{ field: 'token', value: token }],
+  }).catch(() => null) as Invitation | null
+
+  if (invitation) {
+    return {
+      contextType: invitation.contextType,
+      contextId: invitation.contextId,
+      data: invitation,
+    }
+  }
+
+  return null
+}
 
 export interface CreateInvitationInput {
   identifier?: string
@@ -378,17 +403,21 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.revoke, ctx)
-
       const { token, cancelledBy } = ctx.body
 
-      const invitation = await ctx.context.adapter.findOne({
-        model: 'invitation',
-        where: [{ field: 'token', value: token }],
-      }) as Invitation | null
+      // Find invitation and enrich context BEFORE calling hook
+      const resource = await findInvitationContext(ctx.context.adapter, token)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
+      }
 
-      if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.invitation?.revoke, {
+        ...ctx,
+        resource,
+      })
+
+      const invitation = resource.data as Invitation
       if (invitation.status !== 'pending') {
         throw new APIError('BAD_REQUEST', { message: `Invitation is ${invitation.status}` })
       }
@@ -406,8 +435,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         await config.audit.onInvitationCancelled({
           invitationId: invitation.token,
           email: invitation.identifier || '',
-          contextType: invitation.contextType,
-          contextId: invitation.contextId,
+          contextType: resource.contextType,
+          contextId: resource.contextId,
           cancelledBy,
           timestamp: new Date(),
         })

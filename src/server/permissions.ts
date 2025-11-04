@@ -4,8 +4,48 @@ import type { Adapter } from 'better-auth'
 import type { PermissionGrant, PermissionDeny } from '../schema'
 import type { ContextType } from '../types/context'
 import type { StatementId } from '../types/statement'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth } from './middleware'
+
+/**
+ * Find permission (grant or deny) and determine its context
+ * This helper is used to enrich endpoint hooks with resource context
+ */
+export async function findPermissionContext(
+  adapter: Adapter,
+  permissionId: string,
+  type: 'grant' | 'deny'
+): Promise<ResourceContext | null> {
+  if (type === 'grant') {
+    const grant = await adapter.findOne({
+      model: 'permissionGrant',
+      where: [{ field: 'id', value: permissionId }],
+    }).catch(() => null) as PermissionGrant | null
+
+    if (grant) {
+      return {
+        contextType: grant.contextType,
+        contextId: grant.contextId,
+        data: grant,
+      }
+    }
+  } else {
+    const deny = await adapter.findOne({
+      model: 'permissionDeny',
+      where: [{ field: 'id', value: permissionId }],
+    }).catch(() => null) as PermissionDeny | null
+
+    if (deny) {
+      return {
+        contextType: deny.contextType,
+        contextId: deny.contextId,
+        data: deny,
+      }
+    }
+  }
+
+  return null
+}
 
 export interface GrantPermissionInput {
   userId: string
@@ -209,60 +249,36 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.revoke, ctx)
-
       const { permissionId, type, revokedBy } = ctx.body
 
-      let userId: string
-      let statementId: StatementId
-      let contextType: ContextType
-      let contextId: string
-
-      if (type === 'grant') {
-        const grant = await ctx.context.adapter.findOne({
-          model: 'permissionGrant',
-          where: [{ field: 'id', value: permissionId }],
-        }) as PermissionGrant | null
-        if (!grant) {
-          throw new APIError('NOT_FOUND', { message: `Grant with id "${permissionId}" not found` })
-        }
-        userId = grant.userId
-        statementId = grant.statementId
-        contextType = grant.contextType
-        contextId = grant.contextId
-
-        await ctx.context.adapter.delete({
-          model: 'permissionGrant',
-          where: [{ field: 'id', value: permissionId }],
-        })
-      } else {
-        const deny = await ctx.context.adapter.findOne({
-          model: 'permissionDeny',
-          where: [{ field: 'id', value: permissionId }],
-        }) as PermissionDeny | null
-        if (!deny) {
-          throw new APIError('NOT_FOUND', { message: `Deny with id "${permissionId}" not found` })
-        }
-        userId = deny.userId
-        statementId = deny.statementId
-        contextType = deny.contextType
-        contextId = deny.contextId
-
-        await ctx.context.adapter.delete({
-          model: 'permissionDeny',
-          where: [{ field: 'id', value: permissionId }],
-        })
+      // Find permission and enrich context BEFORE calling hook
+      const resource = await findPermissionContext(ctx.context.adapter, permissionId, type)
+      if (!resource) {
+        throw new APIError('NOT_FOUND', { message: `${type === 'grant' ? 'Grant' : 'Deny'} with id "${permissionId}" not found` })
       }
+
+      // Apply authorization hook with enriched context
+      await applyEndpointAuth(config?.endpoints?.permission?.revoke, {
+        ...ctx,
+        resource,
+      })
+
+      const permission = resource.data as PermissionGrant | PermissionDeny
+      const modelName = type === 'grant' ? 'permissionGrant' : 'permissionDeny'
+
+      await ctx.context.adapter.delete({
+        model: modelName,
+        where: [{ field: 'id', value: permissionId }],
+      })
 
       if (config?.audit?.onPermissionRevoked) {
         await config.audit.onPermissionRevoked({
           type,
           permissionId,
-          userId,
-          statementId,
-          contextType,
-          contextId,
+          userId: permission.userId,
+          statementId: permission.statementId,
+          contextType: resource.contextType,
+          contextId: resource.contextId,
           revokedBy,
           timestamp: new Date(),
         })
