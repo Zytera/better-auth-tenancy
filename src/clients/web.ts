@@ -6,8 +6,8 @@
  *
  * @example
  * ```typescript
- * import { createAuthClient } from 'better-auth/client'
- * import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
+ * import { createAuthClient } from 'better-auth/clients'
+ * import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
  *
  * const authClient = createAuthClient({
  *   baseURL: '/api/auth',
@@ -40,9 +40,9 @@ export interface TenancyClientConfig {
  * Better Auth Tenancy Client Plugin for Web/Browser
  *
  * Provides type-safe methods to interact with the tenancy plugin endpoints.
- * All server endpoints are automatically inferred and exposed as client methods.
+ * All server endpoints are automatically inferred and exposed as clients methods.
  *
- * @param config - Optional client configuration
+ * @param config - Optional clients configuration
  * @returns BetterAuthClientPlugin
  */
 export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlugin {

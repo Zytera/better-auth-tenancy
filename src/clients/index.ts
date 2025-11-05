@@ -3,8 +3,8 @@
  *
  * Guard rail fallback - use platform-specific imports instead.
  *
- * 📱 React Native/Expo: import from "@zytera/better-auth-tenancy/client/native"
- * 🌐 Web/Browser: import from "@zytera/better-auth-tenancy/client/web"
+ * 📱 React Native/Expo: import from "@zytera/better-auth-tenancy/clients/native"
+ * 🌐 Web/Browser: import from "@zytera/better-auth-tenancy/clients/web"
  * 🖥️ Server: import from "@zytera/better-auth-tenancy"
  */
 
@@ -13,8 +13,8 @@ export type * from '../types'
 
 /**
  * @deprecated Use platform-specific imports instead:
- * - React Native/Expo: import { tenancyClient } from "@zytera/better-auth-tenancy/client/native"
- * - Web/Browser: import { tenancyClient } from "@zytera/better-auth-tenancy/client/web"
+ * - React Native/Expo: import { tenancyClient } from "@zytera/better-auth-tenancy/clients/native"
+ * - Web/Browser: import { tenancyClient } from "@zytera/better-auth-tenancy/clients/web"
  *
  * This fallback export is provided for backwards compatibility but may
  * cause environment-specific issues. Prefer platform-specific imports.

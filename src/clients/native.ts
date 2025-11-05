@@ -7,7 +7,7 @@
  * @example
  * ```typescript
  * import { createAuthClient } from 'better-auth/react'
- * import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
+ * import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
  *
  * const authClient = createAuthClient({
  *   baseURL: 'https://api.example.com/api/auth',
@@ -40,11 +40,11 @@ export interface TenancyClientConfig {
  * Better Auth Tenancy Client Plugin for React Native/Expo
  *
  * Provides type-safe methods to interact with the tenancy plugin endpoints.
- * All server endpoints are automatically inferred and exposed as client methods.
+ * All server endpoints are automatically inferred and exposed as clients methods.
  *
  * Works with @better-auth/expo plugin for session management.
  *
- * @param config - Optional client configuration
+ * @param config - Optional clients configuration
  * @returns BetterAuthClientPlugin
  */
 export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlugin {
