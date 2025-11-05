@@ -1,72 +1,40 @@
 /**
  * Better Auth Tenancy - Client Plugin
  *
- * Type-safe client plugin for interacting with Better Auth Tenancy APIs.
- * Works on web, React Native, Node.js, and edge runtimes.
+ * Guard rail fallback - use platform-specific imports instead.
  *
- * @example
- * ```typescript
- * import { createAuthClient } from 'better-auth/client'
- * import { tenancyClient } from '@zytera/better-auth-tenancy/client'
- *
- * const authClient = createAuthClient({
- *   baseURL: '/api/auth',
- *   plugins: [
- *     tenancyClient({ locale: 'es' })
- *   ]
- * })
- *
- * // Use the client - endpoints are automatically inferred
- * const org = await authClient.organization.create({
- *   name: 'Acme Corp',
- *   slug: 'acme',
- *   createdBy: userId,
- * })
- *
- * const hasPermission = await authClient.permission.check({
- *   userId: 'user-123',
- *   statementId: 'team:create',
- *   contextType: 'organization',
- *   contextId: org.id,
- * })
- * ```
+ * 📱 React Native/Expo: import from "@zytera/better-auth-tenancy/client/native"
+ * 🌐 Web/Browser: import from "@zytera/better-auth-tenancy/client/web"
+ * 🖥️ Server: import from "@zytera/better-auth-tenancy"
  */
 
-import type { BetterAuthClientPlugin } from 'better-auth/client'
-import type { tenancy } from '../plugin'
-
-export interface TenancyClientConfig {
-  /**
-   * Preferred locale for i18n (e.g., 'en', 'es', 'fr')
-   * This will add the Accept-Language header to all requests
-   */
-  locale?: string
-}
+// Shared types
+export type * from '../types'
 
 /**
- * Better Auth Tenancy Client Plugin
+ * @deprecated Use platform-specific imports instead:
+ * - React Native/Expo: import { tenancyClient } from "@zytera/better-auth-tenancy/client/native"
+ * - Web/Browser: import { tenancyClient } from "@zytera/better-auth-tenancy/client/web"
  *
- * Provides type-safe methods to interact with the tenancy plugin endpoints.
- * All server endpoints are automatically inferred and exposed as client methods.
- *
- * @param config - Optional client configuration
- * @returns BetterAuthClientPlugin
+ * This fallback export is provided for backwards compatibility but may
+ * cause environment-specific issues. Prefer platform-specific imports.
  */
-export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlugin {
-  const plugin: any = {
-    id: 'better-auth-tenancy',
-    $InferServerPlugin: {} as ReturnType<typeof tenancy>,
-    fetchOptions: {
-      // Include credentials (cookies) in all requests for authentication
-      credentials: 'include',
-      headers: {
-        ...(config?.locale && { 'Accept-Language': config.locale }),
-      },
-    },
-  }
+export function tenancyClient() {
+  throw new Error(`
+🚫 Platform-specific import required!
 
-  return plugin
+Please use the appropriate import for your environment:
+
+📱 React Native/Expo:
+   import { tenancyClient } from "@zytera/better-auth-tenancy/client/native"
+
+🌐 Web/Browser:
+   import { tenancyClient } from "@zytera/better-auth-tenancy/client/web"
+
+🖥️ Server (Better Auth):
+   import { tenancy } from "@zytera/better-auth-tenancy"
+
+This prevents cookie/credential handling issues and provides
+optimized implementations for each platform.
+  `)
 }
-
-// Export types for convenience
-export type * from '../types'

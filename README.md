@@ -31,7 +31,9 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Audit hooks**: Track all permission and entity changes
 - **Cache integration**: Configurable caching for high performance
 - **Database-agnostic**: Works with any Better Auth database adapter
-- **55 REST endpoints**: Complete API out of the box
+- **Platform-specific clients**: Optimized for web and React Native/Expo
+- **Permission filtering hooks**: Filter resources based on user permissions
+- **55+ REST endpoints**: Complete API out of the box
 
 ## ✨ Features
 
@@ -73,13 +75,13 @@ Define granular permissions:
 
 ```typescript
 // Define statements
-await client.statements.create({
+await client.statement.create({
   id: 'subteam:delete',
   createdBy: userId
 })
 
 // Create role with statements
-await client.roles.create({
+await client.role.create({
   name: 'Team Manager',
   contextType: 'team',
   contextId: teamId,
@@ -93,7 +95,7 @@ await client.roles.create({
 Grant time-limited access:
 
 ```typescript
-await client.permissions.grant({
+await client.permission.grant({
   userId,
   statementId: 'billing:manage',
   contextType: 'organization',
@@ -109,7 +111,7 @@ Built-in invitation workflow:
 
 ```typescript
 // Create invitation
-const invitation = await client.invitations.create({
+const invitation = await client.invitation.create({
   email: 'user@example.com',
   contextType: 'team',
   contextId: teamId,
@@ -119,9 +121,8 @@ const invitation = await client.invitations.create({
 })
 
 // Accept invitation
-await client.invitations.accept({
-  invitationId: invitation.id,
-  userId
+await client.invitation.accept({
+  token: invitation.token
 })
 ```
 
@@ -130,28 +131,51 @@ await client.invitations.accept({
 Full multi-language support with automatic locale detection:
 
 ```typescript
-// Create client with locale preference
-const client = tenancyClient({
-  baseUrl: '/api/auth',
-  locale: 'es', // Spanish
+// Web - Create client with locale preference
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
+
+const client = createAuthClient({
+  baseURL: '/api/auth',
+  plugins: [
+    tenancyClient({ locale: 'es' }) // Spanish
+  ]
 })
 
-// Add translations to statements
-await client.statements.addTranslation('document:publish', {
-  locale: 'es',
-  name: 'Publicar Documentos',
-  description: 'Publicar documentos a producción'
-})
-
-// Get statement (returns Spanish translation automatically)
-const statement = await client.statements.get('document:publish')
-console.log(statement.translation?.name) // "Publicar Documentos"
-
-// Change locale dynamically
-client.setLocale('fr')
+// All requests automatically include Accept-Language: es header
 ```
 
-The API automatically selects the best translation based on the `Accept-Language` header following standard HTTP content negotiation rules. See [I18N.md](./docs/I18N.md) for full documentation.
+The API automatically selects the best translation based on the `Accept-Language` header following standard HTTP content negotiation rules.
+
+### 🔍 Permission Filtering Hooks
+
+Filter resources based on user permissions:
+
+```typescript
+// Server-side configuration
+tenancy({
+  permissionFiltering: {
+    // Filter organizations user can access
+    filterOrganizations: async (userId, organizations) => {
+      return organizations.filter(org =>
+        await hasPermission(userId, 'org:view', 'organization', org.id)
+      )
+    },
+
+    // Filter teams by organization context
+    filterTeams: async (userId, teams, { organizationId }) => {
+      return teams.filter(team =>
+        await hasPermission(userId, 'team:view', 'team', team.id)
+      )
+    },
+
+    // Filter members by context
+    filterOrganizationMembers: async (userId, members, { organizationId }) => {
+      // Custom filtering logic
+      return members
+    }
+  }
+})
+```
 
 ## 🏗️ Architecture
 
@@ -218,42 +242,47 @@ yarn add @zytera/better-auth-tenancy better-auth
 - **Bun**: >=1.0.0 (or Node.js >=18.0.0)
 - **Better Auth**: ^1.0.0
 - **Database**: Any supported by Better Auth
+- **React Native/Expo**: @better-auth/expo for mobile support
 
 ### Import Paths
 
 **Server-side (Better Auth plugin):**
 ```typescript
+import { tenancy } from '@zytera/better-auth-tenancy'
+// or
 import { tenancy } from '@zytera/better-auth-tenancy/server'
 ```
 
-**Client-side (Frontend/Mobile):**
+**Client-side Web (Browser):**
 ```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
+```
+
+**Client-side Mobile (React Native/Expo):**
+```typescript
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
 ```
 
 **TypeScript types:**
 ```typescript
-import type { TenancyConfig, Organization } from '@zytera/better-auth-tenancy/server'
-import type { TenancyClient } from '@zytera/better-auth-tenancy/client'
+import type { TenancyConfig, Organization } from '@zytera/better-auth-tenancy'
 ```
 
 ### Platform Support
 
 Works everywhere JavaScript runs:
 - ✅ **Web**: Astro, Next.js, SvelteKit, Remix, Vite, vanilla JS
-- ✅ **Mobile**: React Native, Expo (no polyfills needed)
+- ✅ **Mobile**: React Native, Expo (with @better-auth/expo)
 - ✅ **Server**: Bun (recommended), Node.js, Deno
 - ✅ **Edge**: Cloudflare Workers, Vercel Edge, Deno Deploy
 
-Built for Bun - uses standard `fetch` API, zero dependencies, universal compatibility.
-
 ## 🚀 Quick Start
 
-### 1. Configure Better Auth
+### 1. Configure Better Auth (Server)
 
 ```typescript
 import { betterAuth } from 'better-auth'
-import { tenancy } from '@zytera/better-auth-tenancy/server'
+import { tenancy } from '@zytera/better-auth-tenancy'
 
 export const auth = betterAuth({
   database: {
@@ -286,6 +315,14 @@ export const auth = betterAuth({
         },
       },
 
+      // Optional: Permission filtering
+      permissionFiltering: {
+        filterOrganizations: async (userId, organizations) => {
+          // Custom filtering logic
+          return organizations
+        },
+      },
+
       // Optional: Hierarchy limits
       limits: {
         maxTeamsPerOrganization: 100,
@@ -307,34 +344,63 @@ export const auth = betterAuth({
 })
 ```
 
-### 2. Database Tables
+### 2. Setup Client (Web)
+
+```typescript
+import { createAuthClient } from 'better-auth/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
+
+export const authClient = createAuthClient({
+  baseURL: '/api/auth',
+  plugins: [
+    tenancyClient({ locale: 'es' }) // Optional i18n
+  ]
+})
+
+// All endpoints automatically inferred from server
+// Cookies sent automatically with credentials: 'include'
+```
+
+### 3. Setup Client (React Native/Expo)
+
+```typescript
+import { createAuthClient } from 'better-auth/react'
+import { expoClient } from '@better-auth/expo/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
+
+export const authClient = createAuthClient({
+  baseURL: 'https://api.example.com/api/auth',
+  plugins: [
+    expoClient(),                    // Handles session with SecureStore
+    tenancyClient({ locale: 'es' })  // Tenancy plugin
+  ]
+})
+
+// Session managed by @better-auth/expo automatically
+```
+
+### 4. Database Tables
 
 Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on first run. No manual migrations needed.
 
-### 3. Create Your First Organization
+### 5. Create Your First Organization
 
 ```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/client'
-
-const client = tenancyClient({
-  baseUrl: '/api/auth',
-  fetch: window.fetch.bind(window),
-})
-
 // Create organization
-const org = await client.organizations.create({
+const org = await authClient.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
+  createdBy: userId,
 })
 
 // Create statement
-await client.statements.create({
+await authClient.statement.create({
   id: 'team:create',
   createdBy: userId,
 })
 
 // Create organization role
-const adminRole = await client.roles.create({
+const adminRole = await authClient.role.create({
   name: 'Admin',
   contextType: 'organization',
   contextId: org.id,
@@ -343,11 +409,12 @@ const adminRole = await client.roles.create({
 })
 
 // Add member with role
-await client.members.add({
+await authClient.member.add({
   userId: newUserId,
   contextType: 'organization',
   contextId: org.id,
   roleId: adminRole.id,
+  addedBy: userId,
 })
 ```
 
@@ -368,16 +435,18 @@ Statements are the atomic units of permission. They represent a single action on
 **Creating statements**:
 
 ```typescript
-await client.statements.create({
+await authClient.statement.create({
   id: 'document:publish',
   createdBy: userId,
 })
 
-// Add translations for i18n
-await client.statements.addTranslation('document:publish', {
+// Add translations for i18n (server-side)
+await authClient.statement.addTranslation({
+  statementId: 'document:publish',
   locale: 'es',
   name: 'Publicar documentos',
   description: 'Publicar documentos en producción',
+  addedBy: userId,
 })
 ```
 
@@ -393,7 +462,7 @@ Roles are collections of statements that can be assigned to users.
 
 ```typescript
 // Organization role
-await client.roles.create({
+await authClient.role.create({
   name: 'Billing Manager',
   description: 'Manages billing and subscriptions',
   contextType: 'organization',
@@ -407,7 +476,7 @@ await client.roles.create({
 })
 
 // Team custom role
-await client.roles.create({
+await authClient.role.create({
   name: 'Content Editor',
   description: 'Can edit and publish content',
   contextType: 'team',
@@ -427,19 +496,21 @@ Members represent users assigned to contexts with specific roles.
 
 ```typescript
 // Add to organization
-await client.members.add({
+await authClient.member.add({
   userId: user.id,
   contextType: 'organization',
   contextId: org.id,
   roleId: adminRoleId,
+  addedBy: currentUserId,
 })
 
 // Add to team with custom role
-await client.members.add({
+await authClient.member.add({
   userId: user.id,
   contextType: 'team',
   contextId: team.id,
   roleId: editorRoleId,
+  addedBy: currentUserId,
 })
 ```
 
@@ -448,7 +519,7 @@ await client.members.add({
 Check if a user has permission:
 
 ```typescript
-const result = await client.permissions.check({
+const result = await authClient.permission.check({
   userId: user.id,
   statementId: 'team:delete',
   contextType: 'team',
@@ -467,7 +538,7 @@ Override role-based permissions:
 
 ```typescript
 // Grant temporary permission (24 hours)
-await client.permissions.grant({
+await authClient.permission.grant({
   userId: user.id,
   statementId: 'deploy:production',
   contextType: 'team',
@@ -477,7 +548,7 @@ await client.permissions.grant({
 })
 
 // Deny permission (highest priority)
-await client.permissions.deny({
+await authClient.permission.deny({
   userId: user.id,
   statementId: 'sensitive:data',
   contextType: 'organization',
@@ -488,104 +559,73 @@ await client.permissions.deny({
 
 ## 🔌 API Reference
 
-### HTTP Endpoints
+### Client Methods
 
-Better Auth Tenancy exposes 55 REST endpoints:
+All endpoints are automatically inferred from the server plugin and available through the client:
 
-#### Organizations (6 endpoints)
+```typescript
+// Organizations
+authClient.organization.create({ name, slug, createdBy })
+authClient.organization.get({ id })
+authClient.organization.update({ id, name, updatedBy })
+authClient.organization.delete({ id, deletedBy })
+authClient.organization.list()
 
-```http
-POST   /organization/create
-GET    /organization/:id
-GET    /organization/by-slug/:slug
-PATCH  /organization/:id
-DELETE /organization/:id
-GET    /organization/list
-```
+// Teams
+authClient.team.create({ organizationId, name, slug, createdBy })
+authClient.team.get({ id })
+authClient.team.update({ id, name, updatedBy })
+authClient.team.delete({ id, deletedBy })
+authClient.team.listByOrganization({ organizationId })
 
-#### Teams (6 endpoints)
+// Subteams
+authClient.subteam.create({ teamId, name, slug, createdBy })
+authClient.subteam.get({ id })
+authClient.subteam.update({ id, name, updatedBy })
+authClient.subteam.delete({ id, deletedBy })
+authClient.subteam.listByTeam({ teamId })
 
-```http
-POST   /team/create
-GET    /team/:id
-GET    /team/by-slug/:organizationId/:slug
-PATCH  /team/:id
-DELETE /team/:id
-GET    /team/list/:organizationId
-```
+// Statements
+authClient.statement.create({ id, createdBy })
+authClient.statement.get({ id })
+authClient.statement.delete({ id, deletedBy })
+authClient.statement.listAll()
+authClient.statement.addTranslation({ statementId, locale, name, description, addedBy })
 
-#### Subteams (5 endpoints)
+// Roles
+authClient.role.create({ name, contextType, contextId, statements, createdBy })
+authClient.role.get({ id })
+authClient.role.update({ id, name, updatedBy })
+authClient.role.delete({ id, deletedBy })
+authClient.role.list({ contextType, contextId })
+authClient.role.addStatement({ id, statementId, addedBy })
+authClient.role.removeStatement({ id, statementId, removedBy })
 
-```http
-POST   /subteam/create
-GET    /subteam/:id
-GET    /subteam/by-slug/:teamId/:slug
-PATCH  /subteam/:id
-DELETE /subteam/:id
-GET    /subteam/list/:teamId
-```
+// Members
+authClient.member.add({ userId, contextType, contextId, roleId, addedBy })
+authClient.member.updateRole({ id, roleId, updatedBy })
+authClient.member.remove({ id, removedBy })
+authClient.member.list({ contextType, contextId })
+authClient.member.getUserMemberships({ userId })
+authClient.member.checkMembership({ userId, contextType, contextId })
 
-#### Roles (7 endpoints)
+// Permissions
+authClient.permission.grant({ userId, statementId, contextType, contextId, grantedBy, expiresAt? })
+authClient.permission.deny({ userId, statementId, contextType, contextId, deniedBy })
+authClient.permission.revoke({ userId, statementId, contextType, contextId, revokedBy })
+authClient.permission.check({ userId, statementId, contextType, contextId })
+authClient.permission.listGrants({ userId })
+authClient.permission.listDenies({ userId })
 
-```http
-POST   /role/create
-GET    /role/:id
-PATCH  /role/:id
-DELETE /role/:id
-GET    /role/list/:contextType/:contextId
-POST   /role/:id/statement
-DELETE /role/:id/statement/:statementId
-```
-
-#### Statements (6 endpoints)
-
-```http
-POST   /statement/create
-GET    /statement/:id
-PATCH  /statement/:id
-DELETE /statement/:id
-GET    /statement/list
-POST   /statement/batch-create
-```
-
-#### Members (8 endpoints)
-
-```http
-POST   /member/add
-PATCH  /member/role
-DELETE /member/remove
-GET    /member/list/:contextType/:contextId
-POST   /member/bulk-add
-GET    /member/check
-DELETE /member/bulk-remove
-POST   /member/transfer
-```
-
-#### Invitations (7 endpoints)
-
-```http
-POST   /invitation/create
-GET    /invitation/:id
-GET    /invitation/by-token/:token
-POST   /invitation/:id/accept
-POST   /invitation/:id/decline
-POST   /invitation/:id/revoke
-GET    /invitation/list/:contextType/:contextId
-GET    /invitation/by-email/:email
-POST   /invitation/cleanup-expired
-```
-
-#### Permissions (8 endpoints)
-
-```http
-POST   /permission/grant
-POST   /permission/deny
-POST   /permission/revoke
-POST   /permission/check
-GET    /permission/grants/:userId
-GET    /permission/denies/:userId
-POST   /permission/check-batch
-DELETE /permission/cleanup/:contextType/:contextId
+// Invitations
+authClient.invitation.create({ email, contextType, contextId, roleId, invitedBy, expiresInHours? })
+authClient.invitation.accept({ token })
+authClient.invitation.reject({ token })
+authClient.invitation.cancel({ id, cancelledBy })
+authClient.invitation.getByToken({ token })
+authClient.invitation.getByCode({ code })
+authClient.invitation.list({ contextType, contextId })
+authClient.invitation.cleanupExpired()
 ```
 
 ## 🗄️ Database Schema
@@ -621,100 +661,80 @@ Better Auth automatically creates these tables on first run.
 
 ## 💻 Client Usage
 
-The client works everywhere: **web browsers** (Astro, Next.js, Vite), **React Native/Expo**, **Bun/Node.js servers**, and **edge runtimes** (Cloudflare Workers, Vercel Edge).
+### Platform-Specific Clients
 
-### Creating the Client
+The plugin provides optimized clients for different platforms:
 
-```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/client'
-
-const client = tenancyClient({
-  baseUrl: '/api/auth', // Your Better Auth base URL
-  fetch: window.fetch.bind(window), // Optional, uses global fetch by default
-  locale: 'es', // Optional, for i18n support
-  headers: {
-    // Optional: Add custom headers
-    'Authorization': `Bearer ${token}`,
-  },
-})
-```
-
-### Expo / React Native
+#### 🌐 Web/Browser
 
 ```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/client'
-import { getLocales } from 'expo-localization'
+import { createAuthClient } from 'better-auth/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
 
-const client = tenancyClient({
-  baseUrl: process.env.EXPO_PUBLIC_AUTH_URL,
-  locale: getLocales()[0]?.languageCode || 'en', // Device language
+const authClient = createAuthClient({
+  baseURL: '/api/auth',
+  plugins: [
+    tenancyClient({ locale: 'es' })
+  ]
 })
 
-// Works perfectly with React Native's fetch - no polyfills needed!
-const orgs = await client.organizations.list()
+// Cookies sent automatically with credentials: 'include'
 ```
 
-### Available APIs
+**Features:**
+- ✅ Automatic cookie handling
+- ✅ Accept-Language header support
+- ✅ Works in all modern browsers
+
+#### 📱 React Native/Expo
 
 ```typescript
-// Organizations
-client.organizations.create(...)
-client.organizations.get(id)
-client.organizations.update(id, ...)
-client.organizations.delete(id)
-client.organizations.list(options)
+import { createAuthClient } from 'better-auth/react'
+import { expoClient } from '@better-auth/expo/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
 
-// Teams
-client.teams.create(...)
-client.teams.get(id)
-client.teams.update(id, ...)
-client.teams.delete(id)
-client.teams.listByOrganization(orgId, options)
+const authClient = createAuthClient({
+  baseURL: 'https://api.example.com/api/auth',
+  plugins: [
+    expoClient(),                    // Required for session management
+    tenancyClient({ locale: 'es' })
+  ]
+})
 
-// Subteams
-client.subteams.create(...)
-client.subteams.get(id)
-client.subteams.update(id, ...)
-client.subteams.delete(id)
-client.subteams.listByTeam(teamId, options)
+// Session stored securely in SecureStore
+```
 
-// Statements
-client.statements.create(...)
-client.statements.get(id)
-client.statements.delete(id)
-client.statements.listAll()
-client.statements.addTranslation(id, ...)
+**Features:**
+- ✅ Works with @better-auth/expo
+- ✅ SecureStore integration
+- ✅ No cookie handling needed
+- ✅ Accept-Language header support
 
-// Roles
-client.roles.create(...)
-client.roles.get(id, contextType)
-client.roles.update(id, ..., contextType)
-client.roles.delete(id, contextType)
-client.roles.list(contextType, contextId)
-client.roles.addStatements(...)
-client.roles.removeStatements(...)
+#### ⚠️ Important: Platform-Specific Imports
 
-// Members
-client.members.add(...)
-client.members.updateRole(...)
-client.members.remove(...)
-client.members.list(contextType, contextId)
+**DO NOT** import from `@zytera/better-auth-tenancy/client` directly. Use platform-specific imports:
 
-// Permissions
-client.permissions.grant(...)
-client.permissions.deny(...)
-client.permissions.revoke(...)
-client.permissions.check(...)
-client.permissions.listGrants(userId)
-client.permissions.listDenies(userId)
+```typescript
+// ❌ Wrong - Will throw error
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
-// Invitations
-client.invitations.create(...)
-client.invitations.accept(...)
-client.invitations.reject(...)
-client.invitations.cancel(...)
-client.invitations.getByToken(token)
-client.invitations.list(options)
+// ✅ Correct - Web
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/web'
+
+// ✅ Correct - React Native/Expo
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
+```
+
+### Configuration Options
+
+```typescript
+interface TenancyClientConfig {
+  /**
+   * Preferred locale for i18n (e.g., 'en', 'es', 'fr')
+   * This will add the Accept-Language header to all requests
+   */
+  locale?: string
+}
 ```
 
 ## 📖 Examples
@@ -723,46 +743,50 @@ client.invitations.list(options)
 
 ```typescript
 // Setup for "Acme Corp" tenant
-const org = await client.organizations.create({
+const org = await authClient.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
+  createdBy: userId,
 })
 
 // Create departments as teams
-const engineering = await client.teams.create({
+const engineering = await authClient.team.create({
   organizationId: org.id,
   name: 'Engineering',
   slug: 'engineering',
+  createdBy: userId,
 })
 
 // Create sub-teams
-const frontend = await client.subteams.create({
+const frontend = await authClient.subteam.create({
   teamId: engineering.id,
   name: 'Frontend',
   slug: 'frontend',
+  createdBy: userId,
 })
 
 // Define permissions
-await client.statements.create({
+await authClient.statement.create({
   id: 'code:commit',
-  createdBy: ownerId,
+  createdBy: userId,
 })
 
 // Create role
-const seniorEngineer = await client.roles.create({
+const seniorEngineer = await authClient.role.create({
   name: 'Senior Engineer',
   contextType: 'team',
   contextId: engineering.id,
   statements: ['code:commit', 'code:review'],
-  createdBy: ownerId,
+  createdBy: userId,
 })
 
 // Add team member
-await client.members.add({
+await authClient.member.add({
   userId: developerId,
   contextType: 'team',
   contextId: engineering.id,
   roleId: seniorEngineer.id,
+  addedBy: userId,
 })
 ```
 
@@ -770,7 +794,7 @@ await client.members.add({
 
 ```typescript
 // Create invitation for new team member
-const invitation = await client.invitations.create({
+const invitation = await authClient.invitation.create({
   email: 'newdev@example.com',
   contextType: 'team',
   contextId: engineeringTeamId,
@@ -787,14 +811,66 @@ await sendEmail({
 })
 
 // When user accepts
-await client.invitations.accept({
-  invitationId: invitation.id,
-  userId: newUserId,
+await authClient.invitation.accept({
+  token: invitation.token
 })
 
 // Cleanup expired invitations (run as cron job)
-await client.invitations.cleanupExpired()
+await authClient.invitation.cleanupExpired()
 ```
+
+### Example 3: React Native/Expo App
+
+```typescript
+import { createAuthClient } from 'better-auth/react'
+import { expoClient } from '@better-auth/expo/client'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client/native'
+import { getLocales } from 'expo-localization'
+
+// Create auth client
+const authClient = createAuthClient({
+  baseURL: process.env.EXPO_PUBLIC_AUTH_URL,
+  plugins: [
+    expoClient(),
+    tenancyClient({
+      locale: getLocales()[0]?.languageCode || 'en'
+    })
+  ]
+})
+
+// Use in your app
+function App() {
+  const [orgs, setOrgs] = useState([])
+
+  useEffect(() => {
+    async function loadOrgs() {
+      const result = await authClient.organization.list()
+      setOrgs(result)
+    }
+    loadOrgs()
+  }, [])
+
+  return (
+    <View>
+      {orgs.map(org => (
+        <Text key={org.id}>{org.name}</Text>
+      ))}
+    </View>
+  )
+}
+```
+
+## 🔒 Security Best Practices
+
+1. **Always use HTTPS in production**
+2. **Validate user input** on the server side
+3. **Use deny rules** for sensitive permissions
+4. **Set expiration dates** for temporary permissions
+5. **Audit permission changes** using audit hooks
+6. **Implement rate limiting** on invitation endpoints
+7. **Use environment variables** for sensitive configuration
+
+## 📝 Development
 
 ### Development Setup
 
@@ -810,13 +886,36 @@ bun install
 bun run build
 
 # Run type check
-bun run type-check
+bun run typecheck
+```
+
+### Scripts
+
+```bash
+bun run build      # Build the package
+bun run dev        # Watch mode
+bun run typecheck  # Type checking
+bun run lint       # Lint code
+bun run test       # Run tests
 ```
 
 ## 🆘 Support
 
 - 🐛 Issues: [GitHub Issues](https://github.com/zytera/better-auth-tenancy/issues)
+- 📖 Documentation: [Full Docs](https://github.com/zytera/better-auth-tenancy/docs)
+
+## 📄 License
+
+MIT License - see LICENSE file for details
 
 ## 🙏 Acknowledgments
 
 - [Better Auth](https://github.com/better-auth/better-auth) - Authentication framework
+- [Expo](https://expo.dev) - Mobile framework
+- [Bun](https://bun.sh) - JavaScript runtime
+
+---
+
+**Version**: 0.0.3
+**Author**: Zytera
+**Keywords**: better-auth, auth, authorization, permissions, rbac, access-control, organizations, teams, multi-tenant, tenancy, workspace, saas
