@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 
 export type Member = OrganizationMember | TeamMember | SubteamMember
 
@@ -66,8 +66,9 @@ export interface AddMemberInput {
   contextType: ContextType
   contextId: string
   roleId?: string
-  addedBy: string
   metadata?: Record<string, unknown>
+  // Internal field for audit (not exposed in public API schema)
+  _addedBy?: string
 }
 
 export interface UpdateMemberRoleInput {
@@ -75,7 +76,7 @@ export interface UpdateMemberRoleInput {
   contextType: ContextType
   contextId: string
   roleId: string | null
-  updatedBy: string
+  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const memberEndpoints = (config?: TenancyConfig) => ({
@@ -88,21 +89,24 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
         roleId: z.string().optional(),
-        addedBy: z.string(),
         metadata: z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
           summary: 'Add member',
-          description: 'Add a member to a context',
+          description: 'Add a member to a context (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.add, ctx)
+      // Require authentication
+      const session = await requireSession(ctx)
+      const addedBy = session.user.id
 
-      const { userId, contextType, contextId, roleId, addedBy, metadata } = ctx.body
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.member?.add, ctx, session)
+
+      const { userId, contextType, contextId, roleId, metadata } = ctx.body
 
       // Check limits
       if (config?.limits) {
@@ -219,18 +223,21 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       params: z.object({ id: z.string() }),
       body: z.object({
         roleId: z.string(),
-        updatedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Update member role',
-          description: 'Update a member\'s role',
+          description: 'Update a member\'s role (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const updatedBy = session.user.id
+
       const { id } = ctx.params
-      const { roleId, updatedBy } = ctx.body
+      const { roleId } = ctx.body
 
       // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
@@ -294,16 +301,18 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       params: z.object({ id: z.string() }),
       body: z.object({
         metadata: z.record(z.unknown()),
-        updatedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Update member metadata',
-          description: 'Update a member\'s metadata',
+          description: 'Update a member\'s metadata (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      await requireSession(ctx)
+
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
 
@@ -359,17 +368,19 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
-      body: z.object({ removedBy: z.string() }),
       metadata: {
         openapi: {
           summary: 'Remove member',
-          description: 'Remove a member from a context',
+          description: 'Remove a member from a context (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const removedBy = session.user.id
+
       const { id } = ctx.params
-      const { removedBy } = ctx.body
 
       // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
@@ -653,13 +664,13 @@ export async function _addMember(
       break
   }
 
-  if (config?.audit?.onMemberAdded) {
+  if (config?.audit?.onMemberAdded && input._addedBy) {
     await config.audit.onMemberAdded({
       userId: input.userId,
       contextType: input.contextType,
       contextId: input.contextId,
       roleId: input.roleId,
-      addedBy: input.addedBy,
+      addedBy: input._addedBy,
       timestamp: new Date(),
     })
   }

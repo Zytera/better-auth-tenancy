@@ -14,6 +14,9 @@ export { memberEndpoints } from './members'
 export { invitationEndpoints } from './invitations'
 export { permissionEndpoints } from './permissions'
 
+// Export middleware utilities
+export { requireSession, applyEndpointAuth } from './middleware'
+
 // Export input types
 export type { CreateOrganizationInput, UpdateOrganizationInput } from './organizations'
 export type { CreateTeamInput, UpdateTeamInput } from './teams'

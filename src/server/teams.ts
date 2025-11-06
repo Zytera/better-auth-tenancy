@@ -3,21 +3,21 @@ import { createAuthEndpoint, APIError } from 'better-auth/api'
 import type { Team } from '../schema'
 import type { TenancyConfig } from '../types/config'
 import { cleanupContextPermissions } from './permissions'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 
 export interface CreateTeamInput {
   organizationId: string
   name: string
   slug: string
   metadata?: Record<string, unknown>
-  createdBy: string
+  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateTeamInput {
   name?: string
   slug?: string
   metadata?: Record<string, unknown>
-  updatedBy: string
+  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const teamEndpoints = (config?: TenancyConfig) => ({
@@ -30,20 +30,23 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         name: z.string().min(1).max(100),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
         metadata: z.record(z.unknown()).optional(),
-        createdBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Create team',
-          description: 'Create a new team within an organization',
+          description: 'Create a new team within an organization (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.team?.create, ctx)
+      // Require authentication
+      const session = await requireSession(ctx)
+      const createdBy = session.user.id
 
-      const { organizationId, name, slug, metadata, createdBy } = ctx.body
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.team?.create, ctx, session)
+
+      const { organizationId, name, slug, metadata } = ctx.body
 
       // Check limits if configured
       if (config?.limits?.maxTeamsPerOrganization) {
@@ -157,21 +160,24 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
         metadata: z.record(z.unknown()).optional(),
-        updatedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Update team',
-          description: 'Update an existing team',
+          description: 'Update an existing team (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const updatedBy = session.user.id
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.team?.update, ctx)
+      await applyEndpointAuth(config?.endpoints?.team?.update, ctx, session)
 
       const { id } = ctx.params
-      const { name, slug, metadata, updatedBy } = ctx.body
+      const { name, slug, metadata } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'team',
@@ -222,20 +228,22 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
-      body: z.object({ deletedBy: z.string() }),
       metadata: {
         openapi: {
           summary: 'Delete team',
-          description: 'Delete team and all related entities',
+          description: 'Delete team and all related entities (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const deletedBy = session.user.id
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.team?.delete, ctx)
+      await applyEndpointAuth(config?.endpoints?.team?.delete, ctx, session)
 
       const { id } = ctx.params
-      const { deletedBy } = ctx.body
 
       const team = await ctx.context.adapter.findOne({
         model: 'team',

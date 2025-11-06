@@ -99,6 +99,8 @@ export interface EndpointAuthContext {
   query?: any
   /** Resource context (automatically populated for read/update/delete operations) */
   resource?: ResourceContext
+  /** Authenticated session (pre-fetched to avoid re-fetching) */
+  session?: any
 }
 
 /**

@@ -5,11 +5,11 @@ import type { StatementId } from '../types/statement'
 import type { TenancyConfig } from '../types/config'
 import { validateStatementId } from '../types/statement'
 import { getLocaleFromHeaders, getBestLocale } from '../utils/locale-helper'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 
 export interface CreateStatementInput {
   id: StatementId
-  createdBy: string
+  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export const statementEndpoints = (config?: TenancyConfig) => ({
@@ -19,20 +19,23 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         id: z.string(),
-        createdBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Create statement',
-          description: 'Create a new permission statement',
+          description: 'Create a new permission statement (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.create, ctx)
+      // Require authentication
+      const session = await requireSession(ctx)
+      const createdBy = session.user.id
 
-      const { id, createdBy } = ctx.body
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.statement?.create, ctx, session)
+
+      const { id } = ctx.body
 
       const validation = validateStatementId(id)
       if (!validation.isValid) {
@@ -136,21 +139,24 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         category: z.string().optional(),
         operation: z.string().optional(),
-        updatedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Update statement',
-          description: 'Update an existing statement',
+          description: 'Update an existing statement (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const updatedBy = session.user.id
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.update, ctx)
+      await applyEndpointAuth(config?.endpoints?.statement?.update, ctx, session)
 
       const { id } = ctx.params
-      const { category, operation, updatedBy } = ctx.body
+      const { category, operation } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'statement',
@@ -191,20 +197,22 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
-      body: z.object({ deletedBy: z.string() }),
       metadata: {
         openapi: {
           summary: 'Delete statement',
-          description: 'Delete a statement',
+          description: 'Delete a statement (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const deletedBy = session.user.id
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.delete, ctx)
+      await applyEndpointAuth(config?.endpoints?.statement?.delete, ctx, session)
 
       const { id } = ctx.params
-      const { deletedBy } = ctx.body
 
       const statement = await ctx.context.adapter.findOne({
         model: 'statement',
