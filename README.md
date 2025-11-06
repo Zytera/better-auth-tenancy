@@ -131,8 +131,8 @@ await client.invitation.accept({
 Full multi-language support with automatic locale detection:
 
 ```typescript
-// Web - Create clients with locale preference
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
+// Universal client with locale preference
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
 const client = createAuthClient({
   baseURL: '/api/auth',
@@ -248,24 +248,18 @@ yarn add @zytera/better-auth-tenancy better-auth
 
 **Server-side (Better Auth plugin):**
 ```typescript
-import { tenancy } from '@zytera/better-auth-tenancy'
-// or
 import { tenancy } from '@zytera/better-auth-tenancy/server'
+import type { TenancyConfig } from '@zytera/better-auth-tenancy/server'
 ```
 
-**Client-side Web (Browser):**
+**Client-side (Universal - works in Web and React Native/Expo):**
 ```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 ```
 
-**Client-side Mobile (React Native/Expo):**
+**Shared types:**
 ```typescript
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
-```
-
-**TypeScript types:**
-```typescript
-import type { TenancyConfig, Organization } from '@zytera/better-auth-tenancy'
+import type { Organization, Statement, Team } from '@zytera/better-auth-tenancy'
 ```
 
 ### Platform Support
@@ -282,7 +276,7 @@ Works everywhere JavaScript runs:
 
 ```typescript
 import { betterAuth } from 'better-auth'
-import { tenancy } from '@zytera/better-auth-tenancy'
+import { tenancy } from '@zytera/better-auth-tenancy/server'
 
 export const auth = betterAuth({
   database: {
@@ -344,46 +338,48 @@ export const auth = betterAuth({
 })
 ```
 
-### 2. Setup Client (Web)
+### 2. Setup Client (Universal)
 
+The client works in both web and React Native/Expo environments:
+
+**Web (Browser):**
 ```typescript
 import { createAuthClient } from 'better-auth/clients'
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
 export const authClient = createAuthClient({
   baseURL: '/api/auth',
   plugins: [
-    tenancyClient({ locale: 'es' }) // Optional i18n
+    tenancyClient({
+      locale: 'es', // Optional i18n
+      fetchOptions: {
+        credentials: 'include' // Send cookies automatically
+      }
+    })
   ]
 })
-
-// All endpoints automatically inferred from server
-// Cookies sent automatically with credentials: 'include'
 ```
 
-### 3. Setup Client (React Native/Expo)
-
+**React Native/Expo:**
 ```typescript
 import { createAuthClient } from 'better-auth/react'
 import { expoClient } from '@better-auth/expo/clients'
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
 export const authClient = createAuthClient({
   baseURL: 'https://api.example.com/api/auth',
   plugins: [
-    expoClient(),                    // Handles session with SecureStore
-    tenancyClient({ locale: 'es' })  // Tenancy plugin
+    expoClient(),               // Handles session with SecureStore
+    tenancyClient({ locale: 'es' })
   ]
 })
-
-// Session managed by @better-auth/expo automatically
 ```
 
-### 4. Database Tables
+### 3. Database Tables
 
 Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on first run. No manual migrations needed.
 
-### 5. Create Your First Organization
+### 4. Create Your First Organization
 
 ```typescript
 // Create organization
@@ -661,28 +657,35 @@ Better Auth automatically creates these tables on first run.
 
 ## 💻 Client Usage
 
-### Platform-Specific Clients
+### Universal Client
 
-The plugin provides optimized clients for different platforms:
+The plugin provides a **universal client** that works seamlessly in both web and React Native/Expo environments:
+
+```typescript
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
+```
 
 #### 🌐 Web/Browser
 
 ```typescript
 import { createAuthClient } from 'better-auth/clients'
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
 const authClient = createAuthClient({
   baseURL: '/api/auth',
   plugins: [
-    tenancyClient({ locale: 'es' })
+    tenancyClient({
+      locale: 'es',
+      fetchOptions: {
+        credentials: 'include' // Send cookies automatically
+      }
+    })
   ]
 })
-
-// Cookies sent automatically with credentials: 'include'
 ```
 
 **Features:**
-- ✅ Automatic cookie handling
+- ✅ Automatic cookie handling with `credentials: 'include'`
 - ✅ Accept-Language header support
 - ✅ Works in all modern browsers
 
@@ -691,39 +694,21 @@ const authClient = createAuthClient({
 ```typescript
 import { createAuthClient } from 'better-auth/react'
 import { expoClient } from '@better-auth/expo/clients'
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 
 const authClient = createAuthClient({
   baseURL: 'https://api.example.com/api/auth',
   plugins: [
-    expoClient(),                    // Required for session management
+    expoClient(),               // Required for session management
     tenancyClient({ locale: 'es' })
   ]
 })
-
-// Session stored securely in SecureStore
 ```
 
 **Features:**
 - ✅ Works with @better-auth/expo
-- ✅ SecureStore integration
-- ✅ No cookie handling needed
+- ✅ SecureStore integration via expoClient
 - ✅ Accept-Language header support
-
-#### ⚠️ Important: Platform-Specific Imports
-
-**DO NOT** import from `@zytera/better-auth-tenancy/client` directly. Use platform-specific imports:
-
-```typescript
-// ❌ Wrong - Will throw error
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients'
-
-// ✅ Correct - Web
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
-
-// ✅ Correct - React Native/Expo
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
-```
 
 ### Configuration Options
 
@@ -824,10 +809,10 @@ await authClient.invitation.cleanupExpired()
 ```typescript
 import { createAuthClient } from 'better-auth/react'
 import { expoClient } from '@better-auth/expo/clients'
-import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
+import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 import { getLocales } from 'expo-localization'
 
-// Create auth clients
+// Create auth client
 const authClient = createAuthClient({
   baseURL: process.env.EXPO_PUBLIC_AUTH_URL,
   plugins: [

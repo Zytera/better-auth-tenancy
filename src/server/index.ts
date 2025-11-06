@@ -4,6 +4,12 @@
  * Main export file for server-side functionality
  */
 
+// Export main plugin and utilities
+export { tenancy, isTenancyPlugin } from './plugin'
+
+// Export configuration types
+export type { TenancyConfig } from './plugin'
+
 // Export endpoint functions
 export { organizationEndpoints } from './organizations'
 export { teamEndpoints } from './teams'
@@ -26,3 +32,21 @@ export type { CreateRoleInput, UpdateRoleInput } from './roles'
 export type { AddMemberInput, UpdateMemberRoleInput, Member } from './members'
 export type { CreateInvitationInput } from './invitations'
 export type { GrantPermissionInput, DenyPermissionInput, RevokePermissionInput, CheckPermissionInput } from './permissions'
+
+// Export config types
+export type {
+  EndpointConfig,
+  EndpointAuthHook,
+  EndpointAuthContext,
+  ResourceContext,
+  HierarchyLimits,
+  I18nConfig,
+  InvitationConfig,
+  PermissionFilteringHooks,
+} from '../types/config'
+
+// Export hook types
+export type { CacheHooks, AuditHooks } from '../types'
+
+// Export context types
+export type { ContextType, Context } from '../types'
