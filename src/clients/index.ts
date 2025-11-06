@@ -48,7 +48,7 @@
 
 import type { BetterAuthClientPlugin } from 'better-auth/client'
 import type { BetterFetchOption } from '@better-fetch/fetch'
-import type { tenancy } from '../plugin'
+import type { tenancy } from '../server/plugin'
 
 export interface TenancyClientConfig {
   /**

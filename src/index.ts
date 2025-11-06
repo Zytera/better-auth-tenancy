@@ -16,7 +16,7 @@
  * - Cache hooks for performance
  * - Audit hooks for compliance
  *
- * @example
+ * @example Server-side usage:
  * ```typescript
  * import { betterAuth } from 'better-auth'
  * import { tenancy } from '@zytera/better-auth-tenancy/server'
@@ -24,12 +24,6 @@
  * export const auth = betterAuth({
  *   plugins: [
  *     tenancy({
- *       endpoints: {
- *         organization: {
- *           create: 'organization:create',
- *           update: 'organization:update',
- *         }
- *       },
  *       limits: {
  *         maxTeamsPerOrganization: 100,
  *       },
@@ -48,11 +42,37 @@
  * })
  * ```
  *
+ * @example Client-side usage (Web):
+ * ```typescript
+ * import { createAuthClient } from 'better-auth/clients'
+ * import { tenancyClient } from '@zytera/better-auth-tenancy/clients/web'
+ *
+ * const client = createAuthClient({
+ *   baseURL: '/api/auth',
+ *   plugins: [tenancyClient({ locale: 'es' })]
+ * })
+ * ```
+ *
+ * @example Client-side usage (React Native/Expo):
+ * ```typescript
+ * import { createAuthClient } from 'better-auth/react'
+ * import { expoClient } from '@better-auth/expo/clients'
+ * import { tenancyClient } from '@zytera/better-auth-tenancy/clients/native'
+ *
+ * const client = createAuthClient({
+ *   baseURL: 'https://api.example.com/api/auth',
+ *   plugins: [
+ *     expoClient(),
+ *     tenancyClient({ locale: 'es' })
+ *   ]
+ * })
+ * ```
+ *
  * @packageDocumentation
  */
 
-// Main plugin export
-export { tenancy, isTenancyPlugin } from './plugin'
+// NOTE: For the server plugin (tenancy function), import from '@zytera/better-auth-tenancy/server'
+// This main export only provides shared types, schemas, and utilities
 
 // Schema exports (database schemas and types)
 export {

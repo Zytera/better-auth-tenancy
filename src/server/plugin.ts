@@ -1,13 +1,13 @@
-import type { TenancyConfig } from './types/config'
+import type { TenancyConfig } from '../types/config'
 import type { BetterAuthPlugin } from 'better-auth'
-import { organizationEndpoints } from './server/organizations'
-import { teamEndpoints } from './server/teams'
-import { subteamEndpoints } from './server/subteams'
-import { statementEndpoints } from './server/statements'
-import { roleEndpoints } from './server/roles'
-import { memberEndpoints } from './server/members'
-import { invitationEndpoints } from './server/invitations'
-import { permissionEndpoints } from './server/permissions'
+import { organizationEndpoints } from './organizations'
+import { teamEndpoints } from './teams'
+import { subteamEndpoints } from './subteams'
+import { statementEndpoints } from './statements'
+import { roleEndpoints } from './roles'
+import { memberEndpoints } from './members'
+import { invitationEndpoints } from './invitations'
+import { permissionEndpoints } from './permissions'
 
 /**
  * Better Auth Tenancy Plugin
@@ -18,7 +18,7 @@ import { permissionEndpoints } from './server/permissions'
  * @example
  * ```typescript
  * import { betterAuth } from 'better-auth'
- * import { tenancy } from '@zytera/better-auth-tenancy'
+ * import { tenancy } from '@zytera/better-auth-tenancy/server'
  *
  * export const auth = betterAuth({
  *   plugins: [
@@ -275,4 +275,4 @@ export function isTenancyPlugin(plugin: unknown): plugin is BetterAuthPlugin {
 }
 
 // Re-export types for convenience
-export type { TenancyConfig } from './types/config'
+export type { TenancyConfig } from '../types/config'
