@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { OrganizationRole, TeamRole } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import type { StatementId } from '../types/statement'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 
 /**
  * Find role and determine its context (organization or team)
@@ -51,13 +51,13 @@ export interface CreateRoleInput {
   name: string
   description?: string
   statements?: StatementId[]
-  createdBy: string
+  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateRoleInput {
   name?: string
   description?: string
-  updatedBy: string
+  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const roleEndpoints = (config?: TenancyConfig) => ({
@@ -71,20 +71,23 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         name: z.string().min(1).max(100),
         description: z.string().optional(),
         statements: z.array(z.string()).optional(),
-        createdBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Create role',
-          description: 'Create a new role within an organization or team',
+          description: 'Create a new role within an organization or team (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.create, ctx)
+      // Require authentication
+      const session = await requireSession(ctx)
+      const createdBy = session.user.id
 
-      const { contextType, contextId, name, description, statements, createdBy } = ctx.body
+      // Apply authorization hook if configured
+      await applyEndpointAuth(config?.endpoints?.role?.create, ctx, session)
+
+      const { contextType, contextId, name, description, statements } = ctx.body
 
       // Check limits
       const maxRoles = contextType === 'organization'
@@ -224,18 +227,21 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
-        updatedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Update role',
-          description: 'Update an existing role',
+          description: 'Update an existing role (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const updatedBy = session.user.id
+
       const { id } = ctx.params
-      const { name, description, updatedBy } = ctx.body
+      const { name, description } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -286,17 +292,19 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
-      body: z.object({ deletedBy: z.string() }),
       metadata: {
         openapi: {
           summary: 'Delete role',
-          description: 'Delete a role',
+          description: 'Delete a role (requires authentication)',
         },
       },
     },
     async (ctx) => {
+      // Require authentication
+      const session = await requireSession(ctx)
+      const deletedBy = session.user.id
+
       const { id } = ctx.params
-      const { deletedBy } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)

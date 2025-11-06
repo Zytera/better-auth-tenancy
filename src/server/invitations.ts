@@ -279,7 +279,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           contextType: invitation.contextType,
           contextId: invitation.contextId,
           roleId: invitation.roleId || undefined,
-          addedBy: invitation.invitedBy,
+          _addedBy: invitation.invitedBy,
         },
         config
       )
