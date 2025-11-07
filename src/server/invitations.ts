@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
@@ -161,8 +161,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx)
+      await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx, session)
 
       const invitation = await ctx.context.adapter.findOne({
         model: 'invitation',
@@ -193,8 +196,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx)
+      await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx, session)
 
       const code = ctx.params.code.toUpperCase()
 
@@ -470,8 +476,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
       const { contextType, contextId } = ctx.params
       const { status, limit = 50, offset = 0 } = ctx.query
@@ -484,18 +493,16 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where.push({ field: 'status', value: status })
       }
 
-      const items = await ctx.context.adapter.findMany({
+      // Get all items first
+      let items = await ctx.context.adapter.findMany({
         model: 'invitation',
         where,
-        limit,
-        offset,
       }) as Invitation[]
 
-      const allItems = await ctx.context.adapter.findMany({
-        model: 'invitation',
-        where,
-      }) as Invitation[]
-      const total = allItems.length
+      const total = items.length
+
+      // Apply pagination after filtering
+      items = items.slice(offset, offset + limit)
 
       // Remove sensitive tokens from list
       const safeItems = items.map(({ token, ...item }) => item)
@@ -523,8 +530,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
       const { identifier } = ctx.params
       const { status } = ctx.query

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
 import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
 import type { ContextType } from '../types/context'
@@ -188,8 +188,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { id } = ctx.params
 
@@ -445,12 +448,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { contextType, contextId } = ctx.params
-      const { limit, offset } = ctx.query
+      const { limit = 50, offset = 0 } = ctx.query
 
+      // Get all items first
       let items: Member[] = []
       switch (contextType) {
         case 'organization':
@@ -473,11 +480,55 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           break
       }
 
-      const total = items.length
-      if (offset) items = items.slice(offset)
-      if (limit) items = items.slice(0, limit)
+      // Apply permission filtering if configured and user is authenticated
+      if (session?.user) {
+        if (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) {
+          items = await config.permissionFiltering.filterOrganizationMembers(
+            session.user.id,
+            items as OrganizationMember[],
+            { organizationId: contextId }
+          )
+        } else if (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) {
+          // Get organizationId from team to build complete context
+          const team = await ctx.context.adapter.findOne({
+            model: 'team',
+            where: [{ field: 'id', value: contextId }],
+          }) as any
+          if (team) {
+            items = await config.permissionFiltering.filterTeamMembers(
+              session.user.id,
+              items as TeamMember[],
+              { teamId: contextId, organizationId: team.organizationId }
+            )
+          }
+        } else if (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers) {
+          // Get teamId and organizationId from subteam to build complete context
+          const subteam = await ctx.context.adapter.findOne({
+            model: 'subteam',
+            where: [{ field: 'id', value: contextId }],
+          }) as any
+          if (subteam) {
+            const team = await ctx.context.adapter.findOne({
+              model: 'team',
+              where: [{ field: 'id', value: subteam.teamId }],
+            }) as any
+            if (team) {
+              items = await config.permissionFiltering.filterSubteamMembers(
+                session.user.id,
+                items as SubteamMember[],
+                { subteamId: contextId, teamId: subteam.teamId, organizationId: team.organizationId }
+              )
+            }
+          }
+        }
+      }
 
-      return ctx.json({ items, total })
+      const total = items.length
+
+      // Apply pagination after filtering
+      items = items.slice(offset, offset + limit)
+
+      return ctx.json({ items, total, limit, offset })
     }
   ),
 
@@ -497,8 +548,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { userId } = ctx.params
       const { contextType } = ctx.query
@@ -560,8 +614,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { userId, contextType, contextId } = ctx.body
 

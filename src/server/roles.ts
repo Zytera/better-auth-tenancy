@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
 import type { OrganizationRole, TeamRole } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
@@ -201,6 +201,9 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       const { id } = ctx.params
 
       // Find role and enrich context BEFORE calling hook
@@ -213,7 +216,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       await applyEndpointAuth(config?.endpoints?.role?.read, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       return ctx.json(resource.data)
     }
@@ -360,25 +363,30 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.role?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.role?.list, ctx, session)
 
       const { contextType, contextId } = ctx.params
-      const { limit, offset } = ctx.query
+      const { limit = 50, offset = 0 } = ctx.query
 
       const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
       const field = contextType === 'organization' ? 'organizationId' : 'teamId'
 
+      // Get all items first
       let items = await ctx.context.adapter.findMany({
         model,
         where: [{ field, value: contextId }],
       }) as (OrganizationRole | TeamRole)[]
 
       const total = items.length
-      if (offset) items = items.slice(offset)
-      if (limit) items = items.slice(0, limit)
 
-      return ctx.json({ items, total, limit: limit || total, offset: offset || 0 })
+      // Apply pagination after filtering
+      items = items.slice(offset, offset + limit)
+
+      return ctx.json({ items, total, limit, offset })
     }
   ),
 

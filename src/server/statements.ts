@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Statement, StatementTranslation } from '../schema'
 import type { StatementId } from '../types/statement'
 import type { TenancyConfig } from '../types/config'
@@ -86,8 +86,11 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.read, ctx)
+      await applyEndpointAuth(config?.endpoints?.statement?.read, ctx, session)
 
       const statement = await ctx.context.adapter.findOne({
         model: 'statement',
@@ -254,21 +257,20 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.statement?.list, ctx, session)
 
       const { limit = 50, offset = 0 } = ctx.query
 
-      const items = await ctx.context.adapter.findMany({
+      // Get all items first
+      let items = await ctx.context.adapter.findMany({
         model: 'statement',
-        limit,
-        offset,
       }) as Statement[]
 
-      const allStatements = await ctx.context.adapter.findMany({
-        model: 'statement',
-      }) as Statement[]
-      const total = allStatements.length
+      const total = items.length
 
       // Get Accept-Language from headers
       const acceptLanguage = getLocaleFromHeaders(ctx.headers)
@@ -285,6 +287,9 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         existing.push(translation)
         translationsByStatement.set(translation.statementId, existing)
       }
+
+      // Apply pagination
+      items = items.slice(offset, offset + limit)
 
       // Add best translation to each statement
       const itemsWithTranslations = items.map((statement) => {

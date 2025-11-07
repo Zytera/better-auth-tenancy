@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
 import type { PermissionGrant, PermissionDeny } from '../schema'
 import type { ContextType } from '../types/context'
@@ -471,8 +471,11 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.listGrants, ctx)
+      await applyEndpointAuth(config?.endpoints?.permission?.listGrants, ctx, session)
 
       const { userId } = ctx.params
       const { contextType, contextId } = ctx.query
@@ -511,8 +514,11 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.listDenies, ctx)
+      await applyEndpointAuth(config?.endpoints?.permission?.listDenies, ctx, session)
 
       const { userId } = ctx.params
       const { contextType, contextId } = ctx.query

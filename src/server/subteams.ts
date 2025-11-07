@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Subteam } from '../schema'
 import type { TenancyConfig } from '../types/config'
 import { cleanupContextPermissions } from './permissions'
@@ -101,8 +101,11 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.subteam?.read, ctx)
+      await applyEndpointAuth(config?.endpoints?.subteam?.read, ctx, session)
 
       const subteam = await ctx.context.adapter.findOne({
         model: 'subteam',
@@ -256,24 +259,40 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.subteam?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.subteam?.list, ctx, session)
 
       const { teamId } = ctx.params
       const { limit = 50, offset = 0 } = ctx.query
 
-      const items = await ctx.context.adapter.findMany({
+      // Get all items first
+      let items = await ctx.context.adapter.findMany({
         model: 'subteam',
         where: [{ field: 'teamId', value: teamId }],
-        limit,
-        offset,
       }) as Subteam[]
 
-      const allSubteams = await ctx.context.adapter.findMany({
-        model: 'subteam',
-        where: [{ field: 'teamId', value: teamId }],
-      }) as Subteam[]
-      const total = allSubteams.length
+      // Apply permission filtering if configured and user is authenticated
+      if (config?.permissionFiltering?.filterSubteams && session?.user) {
+        // Get organizationId from team to build complete context
+        const team = await ctx.context.adapter.findOne({
+          model: 'team',
+          where: [{ field: 'id', value: teamId }],
+        }) as any
+        if (team) {
+          items = await config.permissionFiltering.filterSubteams(session.user.id, items, {
+            teamId,
+            organizationId: team.organizationId
+          })
+        }
+      }
+
+      const total = items.length
+
+      // Apply pagination after filtering
+      items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })
     }
