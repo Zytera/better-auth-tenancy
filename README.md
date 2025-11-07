@@ -24,15 +24,16 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Three-level hierarchy**: Organizations → Teams → Subteams
 - **Dynamic roles**: Create custom roles at runtime without code changes
 - **Statement-based permissions**: Fine-grained permissions like `team:create`, `member:add`
-- **Explicit grants/denies**: Override role permissions at user level
+- **Explicit grants/denies**: Override role permissions at user level (deny-first policy)
 - **Temporal permissions**: Set expiration dates for temporary access
 - **Multi-language support**: i18n for permission names and descriptions
-- **Invitation system**: Built-in email-based invitation workflow
+- **Invitation system**: Built-in email-based invitation workflow with multiple delivery methods
 - **Audit hooks**: Track all permission and entity changes
 - **Cache integration**: Configurable caching for high performance
 - **Database-agnostic**: Works with any Better Auth database adapter
-- **Platform-specific clients**: Optimized for web and React Native/Expo
-- **Permission filtering hooks**: Filter resources based on user permissions
+- **Universal client**: Single import works seamlessly in web and React Native/Expo (~70 lines, 85% smaller)
+- **Permission filtering hooks**: Filter resources based on user permissions (organizations, teams, members)
+- **Type-safe API**: Full TypeScript support with automatic endpoint inference
 - **55+ REST endpoints**: Complete API out of the box
 
 ## ✨ Features
@@ -901,6 +902,6 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Version**: 0.0.3
+**Version**: 1.0.0
 **Author**: Zytera
 **Keywords**: better-auth, auth, authorization, permissions, rbac, access-control, organizations, teams, multi-tenant, tenancy, workspace, saas
