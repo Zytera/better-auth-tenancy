@@ -299,22 +299,22 @@ export interface InvitationConfig {
  * @example
  * ```typescript
  * permissionFiltering: {
- *   filterOrganizations: async (userId, organizations, context) => {
+ *   filterOrganizations: async (ctx, organizations) => {
+ *     // Access session from ctx
+ *     const session = await getSessionFromCtx(ctx)
+ *     if (!session?.user) return organizations
+ *
  *     // Custom logic: implement your own filtering based on business rules
- *     // Example: filter by custom criteria, metadata, etc.
- *     return organizations
+ *     return organizations.filter(org => canAccessOrg(session.user.id, org.id))
  *   },
- *   filterTeams: async (userId, teams, context) => {
+ *   filterTeams: async (ctx, teams, context) => {
+ *     // Access session and params from ctx
+ *     const session = await getSessionFromCtx(ctx)
+ *     const { organizationId } = context
+ *
  *     // Custom logic: only show teams where user has 'team:read' permission
- *     return teams.filter(async (team) => {
- *       return await hasPermission(userId, 'team:read', 'team', team.id)
- *     })
- *   },
- *   filterSubteams: async (userId, subteams, context) => {
- *     // Custom logic: show all subteams for admins, filter for others
- *     if (context.isAdmin) return subteams
- *     return subteams.filter(async (subteam) => {
- *       return await hasPermission(userId, 'subteam:read', 'subteam', subteam.id)
+ *     return teams.filter(team => {
+ *       return hasPermission(session.user.id, 'team:read', 'team', team.id)
  *     })
  *   }
  * }
@@ -324,31 +324,29 @@ export interface PermissionFilteringHooks {
   /**
    * Filter organizations list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param organizations - Array of organizations from the database
-   * @param context - Additional context (if any)
    * @returns Promise<Array> - Filtered array of organizations the user can see
    *
    * If not provided, all organizations are returned (no filtering)
    */
   filterOrganizations?: <T>(
-    userId: string,
-    organizations: T[],
-    context?: Record<string, unknown>
+    ctx: any,
+    organizations: T[]
   ) => Promise<T[]>
 
   /**
    * Filter teams list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param teams - Array of teams from the database
-   * @param context - Additional context (organizationId, etc.)
+   * @param context - Additional context (organizationId)
    * @returns Promise<Array> - Filtered array of teams the user can see
    *
    * If not provided, all teams are returned (no filtering)
    */
   filterTeams?: <T>(
-    userId: string,
+    ctx: any,
     teams: T[],
     context: { organizationId: string }
   ) => Promise<T[]>
@@ -356,15 +354,15 @@ export interface PermissionFilteringHooks {
   /**
    * Filter subteams list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param subteams - Array of subteams from the database
-   * @param context - Additional context (teamId, organizationId, etc.)
+   * @param context - Additional context (teamId, organizationId)
    * @returns Promise<Array> - Filtered array of subteams the user can see
    *
    * If not provided, all subteams are returned (no filtering)
    */
   filterSubteams?: <T>(
-    userId: string,
+    ctx: any,
     subteams: T[],
     context: { teamId: string; organizationId: string }
   ) => Promise<T[]>
@@ -372,15 +370,15 @@ export interface PermissionFilteringHooks {
   /**
    * Filter organization members list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param members - Array of members from the database
-   * @param context - Additional context (organizationId, etc.)
+   * @param context - Additional context (organizationId)
    * @returns Promise<Array> - Filtered array of members the user can see
    *
    * If not provided, all members are returned (no filtering)
    */
   filterOrganizationMembers?: <T>(
-    userId: string,
+    ctx: any,
     members: T[],
     context: { organizationId: string }
   ) => Promise<T[]>
@@ -388,15 +386,15 @@ export interface PermissionFilteringHooks {
   /**
    * Filter team members list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param members - Array of members from the database
-   * @param context - Additional context (teamId, organizationId, etc.)
+   * @param context - Additional context (teamId, organizationId)
    * @returns Promise<Array> - Filtered array of members the user can see
    *
    * If not provided, all members are returned (no filtering)
    */
   filterTeamMembers?: <T>(
-    userId: string,
+    ctx: any,
     members: T[],
     context: { teamId: string; organizationId: string }
   ) => Promise<T[]>
@@ -404,15 +402,15 @@ export interface PermissionFilteringHooks {
   /**
    * Filter subteam members list based on user permissions
    *
-   * @param userId - The ID of the user requesting the list
+   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param members - Array of members from the database
-   * @param context - Additional context (subteamId, teamId, organizationId, etc.)
+   * @param context - Additional context (subteamId, teamId, organizationId)
    * @returns Promise<Array> - Filtered array of members the user can see
    *
    * If not provided, all members are returned (no filtering)
    */
   filterSubteamMembers?: <T>(
-    userId: string,
+    ctx: any,
     members: T[],
     context: { subteamId: string; teamId: string; organizationId: string }
   ) => Promise<T[]>

@@ -480,45 +480,43 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           break
       }
 
-      // Apply permission filtering if configured and user is authenticated
-      if (session?.user) {
-        if (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) {
-          items = await config.permissionFiltering.filterOrganizationMembers(
-            session.user.id,
-            items as OrganizationMember[],
-            { organizationId: contextId }
+      // Apply permission filtering if configured
+      if (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) {
+        items = await config.permissionFiltering.filterOrganizationMembers(
+          ctx,
+          items as OrganizationMember[],
+          { organizationId: contextId }
+        )
+      } else if (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) {
+        // Get organizationId from team to build complete context
+        const team = await ctx.context.adapter.findOne({
+          model: 'team',
+          where: [{ field: 'id', value: contextId }],
+        }) as any
+        if (team) {
+          items = await config.permissionFiltering.filterTeamMembers(
+            ctx,
+            items as TeamMember[],
+            { teamId: contextId, organizationId: team.organizationId }
           )
-        } else if (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) {
-          // Get organizationId from team to build complete context
+        }
+      } else if (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers) {
+        // Get teamId and organizationId from subteam to build complete context
+        const subteam = await ctx.context.adapter.findOne({
+          model: 'subteam',
+          where: [{ field: 'id', value: contextId }],
+        }) as any
+        if (subteam) {
           const team = await ctx.context.adapter.findOne({
             model: 'team',
-            where: [{ field: 'id', value: contextId }],
+            where: [{ field: 'id', value: subteam.teamId }],
           }) as any
           if (team) {
-            items = await config.permissionFiltering.filterTeamMembers(
-              session.user.id,
-              items as TeamMember[],
-              { teamId: contextId, organizationId: team.organizationId }
+            items = await config.permissionFiltering.filterSubteamMembers(
+              ctx,
+              items as SubteamMember[],
+              { subteamId: contextId, teamId: subteam.teamId, organizationId: team.organizationId }
             )
-          }
-        } else if (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers) {
-          // Get teamId and organizationId from subteam to build complete context
-          const subteam = await ctx.context.adapter.findOne({
-            model: 'subteam',
-            where: [{ field: 'id', value: contextId }],
-          }) as any
-          if (subteam) {
-            const team = await ctx.context.adapter.findOne({
-              model: 'team',
-              where: [{ field: 'id', value: subteam.teamId }],
-            }) as any
-            if (team) {
-              items = await config.permissionFiltering.filterSubteamMembers(
-                session.user.id,
-                items as SubteamMember[],
-                { subteamId: contextId, teamId: subteam.teamId, organizationId: team.organizationId }
-              )
-            }
           }
         }
       }

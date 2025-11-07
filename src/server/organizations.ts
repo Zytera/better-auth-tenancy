@@ -284,9 +284,9 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Organization[]
 
-      // Apply permission filtering if configured and user is authenticated
-      if (config?.permissionFiltering?.filterOrganizations && session?.user) {
-        items = await config.permissionFiltering.filterOrganizations(session.user.id, items)
+      // Apply permission filtering if configured
+      if (config?.permissionFiltering?.filterOrganizations) {
+        items = await config.permissionFiltering.filterOrganizations(ctx, items)
       }
 
       const total = items.length
