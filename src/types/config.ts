@@ -89,18 +89,12 @@ export interface ResourceContext {
  * Context passed to endpoint authorization hooks
  */
 export interface EndpointAuthContext {
-  /** Better Auth endpoint context */
+  /** Better Auth endpoint context (contains body, params, query, etc.) */
   ctx: any
-  /** Request body data */
-  body?: any
-  /** Request params */
-  params?: any
-  /** Request query */
-  query?: any
+  /** Authenticated session (may be null if not authenticated) */
+  session: any
   /** Resource context (automatically populated for read/update/delete operations) */
   resource?: ResourceContext
-  /** Authenticated session (pre-fetched to avoid re-fetching) */
-  session?: any
 }
 
 /**

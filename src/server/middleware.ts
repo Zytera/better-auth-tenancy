@@ -38,7 +38,7 @@ export async function requireSession(ctx: any) {
  *
  * @param hook - The authorization hook from config
  * @param ctx - Better Auth endpoint context (contains body, params, query)
- * @param session - Optional pre-fetched session to avoid re-fetching
+ * @param session - Pre-fetched session (null if not authenticated)
  *
  * @example
  * ```typescript
@@ -47,9 +47,8 @@ export async function requireSession(ctx: any) {
  * }, async (ctx) => {
  *   // First require authentication
  *   const session = await requireSession(ctx)
- *   const userId = session.user.id
  *
- *   // Then apply authorization if configured (pass session to avoid re-fetch)
+ *   // Then apply authorization if configured
  *   await applyEndpointAuth(config?.endpoints?.organization?.create, ctx, session)
  *
  *   // Continue with endpoint logic
@@ -61,7 +60,7 @@ export async function requireSession(ctx: any) {
 export async function applyEndpointAuth(
   hook: EndpointAuthHook | undefined,
   ctx: any,
-  session?: any
+  session: any = null
 ): Promise<void | any> {
   if (!hook) {
     // No authorization hook configured, skip
@@ -70,10 +69,7 @@ export async function applyEndpointAuth(
 
   const authContext: EndpointAuthContext = {
     ctx,
-    body: ctx.body,
-    params: ctx.params,
-    query: ctx.query,
-    session, // Pass session if available
+    session,
   }
 
   // Execute the authorization hook

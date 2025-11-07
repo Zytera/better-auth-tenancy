@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError } from 'better-auth/api'
+import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Organization } from '../schema'
 import type { TenancyConfig } from '../types/config'
 import { cleanupContextPermissions } from './permissions'
@@ -85,8 +85,11 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.organization?.read, ctx)
+      await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
       const organization = await ctx.context.adapter.findOne({
         model: 'organization',
@@ -111,8 +114,11 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.organization?.read, ctx)
+      await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
       const organization = await ctx.context.adapter.findOne({
         model: 'organization',
@@ -264,20 +270,29 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
+      // Get session (may be null)
+      const session = await getSessionFromCtx(ctx)
+
       // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.organization?.list, ctx)
+      await applyEndpointAuth(config?.endpoints?.organization?.list, ctx, session)
 
       const { limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
-      const items = await ctx.context.adapter.findMany({
+      // Get all organizations first
+      let items = await ctx.context.adapter.findMany({
         model: 'organization',
-        limit,
-        offset,
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Organization[]
 
-      const allOrgs = await ctx.context.adapter.findMany({ model: 'organization' }) as Organization[]
-      const total = allOrgs.length
+      // Apply permission filtering if configured and user is authenticated
+      if (config?.permissionFiltering?.filterOrganizations && session?.user) {
+        items = await config.permissionFiltering.filterOrganizations(session.user.id, items)
+      }
+
+      const total = items.length
+
+      // Apply pagination after filtering
+      items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })
     }
