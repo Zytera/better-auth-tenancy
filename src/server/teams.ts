@@ -319,9 +319,9 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Team[]
 
-      // Apply permission filtering if configured and user is authenticated
-      if (config?.permissionFiltering?.filterTeams && session?.user) {
-        items = await config.permissionFiltering.filterTeams(session.user.id, items, { organizationId })
+      // Apply permission filtering if configured
+      if (config?.permissionFiltering?.filterTeams) {
+        items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
       }
 
       const total = items.length

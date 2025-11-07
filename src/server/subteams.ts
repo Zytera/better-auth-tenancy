@@ -274,15 +274,15 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'teamId', value: teamId }],
       }) as Subteam[]
 
-      // Apply permission filtering if configured and user is authenticated
-      if (config?.permissionFiltering?.filterSubteams && session?.user) {
+      // Apply permission filtering if configured
+      if (config?.permissionFiltering?.filterSubteams) {
         // Get organizationId from team to build complete context
         const team = await ctx.context.adapter.findOne({
           model: 'team',
           where: [{ field: 'id', value: teamId }],
         }) as any
         if (team) {
-          items = await config.permissionFiltering.filterSubteams(session.user.id, items, {
+          items = await config.permissionFiltering.filterSubteams(ctx, items, {
             teamId,
             organizationId: team.organizationId
           })
