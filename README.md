@@ -565,27 +565,27 @@ All endpoints are automatically inferred from the server plugin and available th
 authClient.organization.create({ name, slug, createdBy })
 authClient.organization.get({ id })
 authClient.organization.update({ id, name, updatedBy })
-authClient.organization.delete({ id, deletedBy })
+authClient.organization.delete({ id }) // deletedBy from authenticated session
 authClient.organization.list()
 
 // Teams
 authClient.team.create({ organizationId, name, slug, createdBy })
 authClient.team.get({ id })
 authClient.team.update({ id, name, updatedBy })
-authClient.team.delete({ id, deletedBy })
+authClient.team.delete({ id }) // deletedBy from authenticated session
 authClient.team.listByOrganization({ organizationId })
 
 // Subteams
 authClient.subteam.create({ teamId, name, slug, createdBy })
 authClient.subteam.get({ id })
 authClient.subteam.update({ id, name, updatedBy })
-authClient.subteam.delete({ id, deletedBy })
+authClient.subteam.delete({ id }) // deletedBy from authenticated session
 authClient.subteam.listByTeam({ teamId })
 
 // Statements
 authClient.statement.create({ id, createdBy })
 authClient.statement.get({ id })
-authClient.statement.delete({ id, deletedBy })
+authClient.statement.delete({ id }) // deletedBy from authenticated session
 authClient.statement.listAll()
 authClient.statement.addTranslation({ statementId, locale, name, description, addedBy })
 
@@ -593,7 +593,7 @@ authClient.statement.addTranslation({ statementId, locale, name, description, ad
 authClient.role.create({ name, contextType, contextId, statements, createdBy })
 authClient.role.get({ id })
 authClient.role.update({ id, name, updatedBy })
-authClient.role.delete({ id, deletedBy })
+authClient.role.delete({ id }) // deletedBy from authenticated session
 authClient.role.list({ contextType, contextId })
 authClient.role.addStatement({ id, statementId, addedBy })
 authClient.role.removeStatement({ id, statementId, removedBy })
