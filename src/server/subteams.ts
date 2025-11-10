@@ -192,6 +192,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
+      body: z.object({}),
       metadata: {
         openapi: {
           summary: 'Delete subteam',

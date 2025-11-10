@@ -371,6 +371,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'DELETE',
       params: z.object({ id: z.string() }),
+      body: z.object({}),
       metadata: {
         openapi: {
           summary: 'Remove member',
