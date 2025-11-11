@@ -14,7 +14,7 @@ export interface CreateStatementInput {
 
 export const statementEndpoints = (config?: TenancyConfig) => ({
   createStatement: createAuthEndpoint(
-    '/statement/create',
+    '/tenancy/statement/create',
     {
       method: 'POST',
       body: z.object({
@@ -74,10 +74,12 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getStatement: createAuthEndpoint(
-    '/statement/:id',
+    '/tenancy/statement/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get statement',
@@ -92,9 +94,11 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.read, ctx, session)
 
+      const { id } = ctx.params
+
       const statement = await ctx.context.adapter.findOne({
         model: 'statement',
-        where: [{ field: 'id', value: ctx.params.id }],
+        where: [{ field: 'id', value: id }],
       }) as Statement | null
 
       if (!statement) throw new APIError('NOT_FOUND', { message: 'Statement not found' })
@@ -135,11 +139,11 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateStatement: createAuthEndpoint(
-    '/statement/:id',
+    '/tenancy/statement/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         category: z.string().optional(),
         operation: z.string().optional(),
       }),
@@ -158,8 +162,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.update, ctx, session)
 
-      const { id } = ctx.params
-      const { category, operation } = ctx.body
+      const { id, category, operation } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'statement',
@@ -196,11 +199,12 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
   ),
 
   deleteStatement: createAuthEndpoint(
-    '/statement/:id',
+    '/tenancy/statement/delete',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
-      
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Delete statement',
@@ -216,7 +220,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.delete, ctx, session)
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       const statement = await ctx.context.adapter.findOne({
         model: 'statement',
@@ -243,7 +247,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listStatements: createAuthEndpoint(
-    '/statement/list',
+    '/tenancy/statement/list',
     {
       method: 'GET',
       query: z.object({
@@ -321,7 +325,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
   ),
 
   batchCreateStatements: createAuthEndpoint(
-    '/statement/batch-create',
+    '/tenancy/statement/batch-create',
     {
       method: 'POST',
       body: z.object({

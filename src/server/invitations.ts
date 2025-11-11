@@ -56,7 +56,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Flexible: can be used for email, phone, username, or anonymous invitations
    */
   createInvitation: createAuthEndpoint(
-    '/invitation/create',
+    '/tenancy/invitation/create',
     {
       method: 'POST',
       body: z.object({
@@ -149,10 +149,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Get invitation by token
    */
   getInvitationByToken: createAuthEndpoint(
-    '/invitation/by-token/:token',
+    '/tenancy/invitation/by-token/:token',
     {
       method: 'GET',
-      params: z.object({ token: z.string() }),
+      params: z.object({
+        token: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get invitation by token',
@@ -167,9 +169,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx, session)
 
+      const { token: tokenParam } = ctx.params
+
       const invitation = await ctx.context.adapter.findOne({
         model: 'invitation',
-        where: [{ field: 'token', value: ctx.params.token }],
+        where: [{ field: 'token', value: tokenParam }],
       }) as Invitation | null
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
@@ -184,10 +188,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Get invitation by short code
    */
   getInvitationByCode: createAuthEndpoint(
-    '/invitation/by-code/:code',
+    '/tenancy/invitation/by-code/:code',
     {
       method: 'GET',
-      params: z.object({ code: z.string() }),
+      params: z.object({
+        code: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get invitation by code',
@@ -225,7 +231,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Accept invitation - flexible acceptance (by token or code)
    */
   acceptInvitation: createAuthEndpoint(
-    '/invitation/accept',
+    '/tenancy/invitation/accept',
     {
       method: 'POST',
       body: z.object({
@@ -326,7 +332,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Reject/decline invitation
    */
   rejectInvitation: createAuthEndpoint(
-    '/invitation/reject',
+    '/tenancy/invitation/reject',
     {
       method: 'POST',
       body: z.object({
@@ -394,7 +400,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Cancel invitation (by admin/inviter)
    */
   cancelInvitation: createAuthEndpoint(
-    '/invitation/cancel',
+    '/tenancy/invitation/cancel',
     {
       method: 'POST',
       body: z.object({
@@ -456,14 +462,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * List invitations for a context
    */
   listInvitations: createAuthEndpoint(
-    '/invitation/list/:contextType/:contextId',
+    '/tenancy/invitation/list',
     {
       method: 'GET',
-      params: z.object({
+      query: z.object({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
-      }),
-      query: z.object({
         status: z.string().optional(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
@@ -482,8 +486,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
-      const { contextType, contextId } = ctx.params
-      const { status, limit = 50, offset = 0 } = ctx.query
+      const { contextType, contextId, status, limit = 50, offset = 0 } = ctx.query
 
       const where: Array<{ field: string; value: string }> = [
         { field: 'contextType', value: contextType },
@@ -515,11 +518,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Get invitations by identifier (email/phone/username)
    */
   getInvitationsByIdentifier: createAuthEndpoint(
-    '/invitation/by-identifier/:identifier',
+    '/tenancy/invitation/by-identifier',
     {
       method: 'GET',
-      params: z.object({ identifier: z.string() }),
       query: z.object({
+        identifier: z.string(),
         status: z.string().optional(),
       }),
       metadata: {
@@ -536,8 +539,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
-      const { identifier } = ctx.params
-      const { status } = ctx.query
+      const { identifier, status } = ctx.query
 
       const where: Array<{ field: string; value: string }> = [{ field: 'identifier', value: identifier }]
       if (status) {
@@ -560,7 +562,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
    * Cleanup expired invitations (cron job)
    */
   cleanupExpiredInvitations: createAuthEndpoint(
-    '/invitation/cleanup-expired',
+    '/tenancy/invitation/cleanup-expired',
     {
       method: 'POST',
       metadata: {

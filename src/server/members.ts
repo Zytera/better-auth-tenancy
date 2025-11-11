@@ -81,7 +81,7 @@ export interface UpdateMemberRoleInput {
 
 export const memberEndpoints = (config?: TenancyConfig) => ({
   addMember: createAuthEndpoint(
-    '/member/add',
+    '/tenancy/member/add',
     {
       method: 'POST',
       body: z.object({
@@ -176,10 +176,12 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getMember: createAuthEndpoint(
-    '/member/:id',
+    '/tenancy/member/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get member',
@@ -220,11 +222,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateMemberRole: createAuthEndpoint(
-    '/member/:id/role',
+    '/tenancy/member/role/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         roleId: z.string(),
       }),
       metadata: {
@@ -239,8 +241,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      const { id } = ctx.params
-      const { roleId } = ctx.body
+      const { id, roleId } = ctx.body
 
       // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
@@ -298,11 +299,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateMemberMetadata: createAuthEndpoint(
-    '/member/:id/metadata',
+    '/tenancy/member/metadata/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         metadata: z.record(z.unknown()),
       }),
       metadata: {
@@ -319,8 +320,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
 
-      const { id } = ctx.params
-      const { metadata } = ctx.body
+      const { id, metadata } = ctx.body
 
       // Try to find and update the member
       const orgMember = await ctx.context.adapter.findOne({
@@ -367,10 +367,12 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   removeMember: createAuthEndpoint(
-    '/member/:id',
+    '/tenancy/member/remove',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Remove member',
@@ -383,7 +385,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const removedBy = session.user.id
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
@@ -429,14 +431,12 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listMembers: createAuthEndpoint(
-    '/member/list/:contextType/:contextId',
+    '/tenancy/member/list',
     {
       method: 'GET',
-      params: z.object({
+      query: z.object({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
-      }),
-      query: z.object({
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
       }),
@@ -454,8 +454,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
-      const { contextType, contextId } = ctx.params
-      const { limit = 50, offset = 0 } = ctx.query
+      const { contextType, contextId, limit = 50, offset = 0 } = ctx.query
 
       // Get all items first
       let items: Member[] = []
@@ -531,11 +530,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getUserMemberships: createAuthEndpoint(
-    '/member/user/:userId',
+    '/tenancy/member/user/memberships',
     {
       method: 'GET',
-      params: z.object({ userId: z.string() }),
       query: z.object({
+        userId: z.string(),
         contextType: z.enum(['organization', 'team', 'subteam']).optional(),
       }),
       metadata: {
@@ -552,8 +551,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
-      const { userId } = ctx.params
-      const { contextType } = ctx.query
+      const { userId, contextType } = ctx.query
 
       if (contextType) {
         switch (contextType) {
@@ -596,7 +594,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
   ),
 
   checkMembership: createAuthEndpoint(
-    '/member/check',
+    '/tenancy/member/check',
     {
       method: 'POST',
       body: z.object({

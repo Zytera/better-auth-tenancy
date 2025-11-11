@@ -79,7 +79,7 @@ export interface CheckPermissionInput {
 
 export const permissionEndpoints = (config?: TenancyConfig) => ({
   grantPermission: createAuthEndpoint(
-    '/permission/grant',
+    '/tenancy/permission/grant',
     {
       method: 'POST',
       body: z.object({
@@ -166,7 +166,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   denyPermission: createAuthEndpoint(
-    '/permission/deny',
+    '/tenancy/permission/deny',
     {
       method: 'POST',
       body: z.object({
@@ -233,7 +233,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   revokePermission: createAuthEndpoint(
-    '/permission/revoke',
+    '/tenancy/permission/revoke',
     {
       method: 'POST',
       body: z.object({
@@ -289,7 +289,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   checkPermission: createAuthEndpoint(
-    '/permission/check',
+    '/tenancy/permission/check',
     {
       method: 'POST',
       body: z.object({
@@ -455,11 +455,11 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listGrants: createAuthEndpoint(
-    '/permission/grants/:userId',
+    '/tenancy/permission/grants',
     {
       method: 'GET',
-      params: z.object({ userId: z.string() }),
       query: z.object({
+        userId: z.string(),
         contextType: z.enum(['organization', 'team', 'subteam']).optional(),
         contextId: z.string().optional(),
       }),
@@ -477,8 +477,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.permission?.listGrants, ctx, session)
 
-      const { userId } = ctx.params
-      const { contextType, contextId } = ctx.query
+      const { userId, contextType, contextId } = ctx.query
 
       const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
@@ -498,11 +497,11 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listDenies: createAuthEndpoint(
-    '/permission/denies/:userId',
+    '/tenancy/permission/denies',
     {
       method: 'GET',
-      params: z.object({ userId: z.string() }),
       query: z.object({
+        userId: z.string(),
         contextType: z.enum(['organization', 'team', 'subteam']).optional(),
         contextId: z.string().optional(),
       }),
@@ -520,8 +519,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.permission?.listDenies, ctx, session)
 
-      const { userId } = ctx.params
-      const { contextType, contextId } = ctx.query
+      const { userId, contextType, contextId } = ctx.query
 
       const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
@@ -541,7 +539,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   grantBatch: createAuthEndpoint(
-    '/permission/grant-batch',
+    '/tenancy/permission/grant-batch',
     {
       method: 'POST',
       body: z.object({
@@ -647,7 +645,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 
   denyBatch: createAuthEndpoint(
-    '/permission/deny-batch',
+    '/tenancy/permission/deny-batch',
     {
       method: 'POST',
       body: z.object({

@@ -22,7 +22,7 @@ export interface UpdateSubteamInput {
 
 export const subteamEndpoints = (config?: TenancyConfig) => ({
   createSubteam: createAuthEndpoint(
-    '/subteam/create',
+    '/tenancy/subteam/create',
     {
       method: 'POST',
       body: z.object({
@@ -89,10 +89,12 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getSubteam: createAuthEndpoint(
-    '/subteam/:id',
+    '/tenancy/subteam/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get subteam',
@@ -107,9 +109,11 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.read, ctx, session)
 
+      const { id } = ctx.params
+
       const subteam = await ctx.context.adapter.findOne({
         model: 'subteam',
-        where: [{ field: 'id', value: ctx.params.id }],
+        where: [{ field: 'id', value: id }],
       }) as Subteam | null
 
       if (!subteam) throw new APIError('NOT_FOUND', { message: 'Subteam not found' })
@@ -118,11 +122,11 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateSubteam: createAuthEndpoint(
-    '/subteam/:id',
+    '/tenancy/subteam/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
         metadata: z.record(z.unknown()).optional(),
@@ -142,8 +146,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.update, ctx, session)
 
-      const { id } = ctx.params
-      const { name, slug, metadata } = ctx.body
+      const { id, name, slug, metadata } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'subteam',
@@ -188,11 +191,12 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   deleteSubteam: createAuthEndpoint(
-    '/subteam/:id',
+    '/tenancy/subteam/delete',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
-      
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Delete subteam',
@@ -208,7 +212,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.delete, ctx, session)
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       const subteam = await ctx.context.adapter.findOne({
         model: 'subteam',
@@ -244,11 +248,11 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listSubteamsByTeam: createAuthEndpoint(
-    '/subteam/list/:teamId',
+    '/tenancy/subteam/list',
     {
       method: 'GET',
-      params: z.object({ teamId: z.string() }),
       query: z.object({
+        teamId: z.string(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
       }),
@@ -266,8 +270,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.list, ctx, session)
 
-      const { teamId } = ctx.params
-      const { limit = 50, offset = 0 } = ctx.query
+      const { teamId, limit = 50, offset = 0 } = ctx.query
 
       // Get all items first
       let items = await ctx.context.adapter.findMany({
