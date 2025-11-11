@@ -22,7 +22,7 @@ export interface UpdateTeamInput {
 
 export const teamEndpoints = (config?: TenancyConfig) => ({
   createTeam: createAuthEndpoint(
-    '/team/create',
+    '/tenancy/team/create',
     {
       method: 'POST',
       body: z.object({
@@ -95,10 +95,12 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getTeam: createAuthEndpoint(
-    '/team/:id',
+    '/tenancy/team/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get team',
@@ -113,9 +115,11 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.read, ctx, session)
 
+      const { id } = ctx.params
+
       const team = await ctx.context.adapter.findOne({
         model: 'team',
-        where: [{ field: 'id', value: ctx.params.id }],
+        where: [{ field: 'id', value: id }],
       }) as Team | null
 
       if (!team) throw new APIError('NOT_FOUND', { message: 'Team not found' })
@@ -124,7 +128,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getTeamBySlug: createAuthEndpoint(
-    '/team/by-slug/:organizationId/:slug',
+    '/tenancy/team/:organizationId/by-slug/:slug',
     {
       method: 'GET',
       params: z.object({
@@ -158,11 +162,11 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateTeam: createAuthEndpoint(
-    '/team/:id',
+    '/tenancy/team/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
         metadata: z.record(z.unknown()).optional(),
@@ -182,8 +186,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.update, ctx, session)
 
-      const { id } = ctx.params
-      const { name, slug, metadata } = ctx.body
+      const { id, name, slug, metadata } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'team',
@@ -230,11 +233,12 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   deleteTeam: createAuthEndpoint(
-    '/team/:id',
+    '/tenancy/team/delete',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
-      
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Delete team',
@@ -250,7 +254,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.delete, ctx, session)
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       const team = await ctx.context.adapter.findOne({
         model: 'team',
@@ -286,11 +290,11 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listTeamsByOrganization: createAuthEndpoint(
-    '/team/list/:organizationId',
+    '/tenancy/team/list',
     {
       method: 'GET',
-      params: z.object({ organizationId: z.string() }),
       query: z.object({
+        organizationId: z.string(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
         orderBy: z.enum(['createdAt', 'name']).optional(),
@@ -310,8 +314,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.list, ctx, session)
 
-      const { organizationId } = ctx.params
-      const { limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
+      const { organizationId, limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
       // Get all teams first
       let items = await ctx.context.adapter.findMany({

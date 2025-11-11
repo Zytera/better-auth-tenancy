@@ -13,6 +13,7 @@ export interface CreateOrganizationInput {
 }
 
 export interface UpdateOrganizationInput {
+  id: string
   name?: string
   slug?: string
   metadata?: Record<string, unknown>
@@ -21,7 +22,7 @@ export interface UpdateOrganizationInput {
 
 export const organizationEndpoints = (config?: TenancyConfig) => ({
   createOrganization: createAuthEndpoint(
-    '/organization/create',
+    '/tenancy/organization/create',
     {
       method: 'POST',
       body: z.object({
@@ -73,10 +74,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getOrganization: createAuthEndpoint(
-    '/organization/:id',
+    '/tenancy/organization/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get organization',
@@ -91,9 +94,11 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
+      const { id } = ctx.params
+
       const organization = await ctx.context.adapter.findOne({
         model: 'organization',
-        where: [{ field: 'id', value: ctx.params.id }],
+        where: [{ field: 'id', value: id }],
       }) as Organization | null
 
       if (!organization) throw new APIError('NOT_FOUND', { message: 'Organization not found' })
@@ -102,10 +107,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getOrganizationBySlug: createAuthEndpoint(
-    '/organization/by-slug/:slug',
+    '/tenancy/organization/by-slug/:slug',
     {
       method: 'GET',
-      params: z.object({ slug: z.string() }),
+      params: z.object({
+        slug: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get organization by slug',
@@ -120,9 +127,11 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
+      const { slug } = ctx.params
+
       const organization = await ctx.context.adapter.findOne({
         model: 'organization',
-        where: [{ field: 'slug', value: ctx.params.slug }],
+        where: [{ field: 'slug', value: slug }],
       }) as Organization | null
 
       if (!organization) throw new APIError('NOT_FOUND', { message: 'Organization not found' })
@@ -131,11 +140,11 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateOrganization: createAuthEndpoint(
-    '/organization/:id',
+    '/tenancy/organization/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
         metadata: z.record(z.unknown()).optional(),
@@ -155,8 +164,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.organization?.update, ctx, session)
 
-      const { id } = ctx.params
-      const { name, slug, metadata } = ctx.body
+      const { id, name, slug, metadata } = ctx.body
 
       const current = await ctx.context.adapter.findOne({
         model: 'organization',
@@ -198,10 +206,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
   ),
 
   deleteOrganization: createAuthEndpoint(
-    '/organization/:id',
+    '/tenancy/organization/delete',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Delete organization',
@@ -217,7 +227,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.organization?.delete, ctx, session)
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       const organization = await ctx.context.adapter.findOne({
         model: 'organization',
@@ -253,7 +263,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listOrganizations: createAuthEndpoint(
-    '/organization/list',
+    '/tenancy/organization/list',
     {
       method: 'GET',
       query: z.object({
@@ -298,4 +308,3 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 })
-

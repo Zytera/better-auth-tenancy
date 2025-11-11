@@ -62,7 +62,7 @@ export interface UpdateRoleInput {
 
 export const roleEndpoints = (config?: TenancyConfig) => ({
   createRole: createAuthEndpoint(
-    '/role/create',
+    '/tenancy/role/create',
     {
       method: 'POST',
       body: z.object({
@@ -189,10 +189,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getRole: createAuthEndpoint(
-    '/role/:id',
+    '/tenancy/role/:id',
     {
       method: 'GET',
-      params: z.object({ id: z.string() }),
+      params: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Get role',
@@ -223,11 +225,11 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   updateRole: createAuthEndpoint(
-    '/role/:id',
+    '/tenancy/role/update',
     {
-      method: 'PATCH',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
       body: z.object({
+        id: z.string(),
         name: z.string().min(1).max(100).optional(),
         description: z.string().optional(),
       }),
@@ -243,8 +245,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      const { id } = ctx.params
-      const { name, description } = ctx.body
+      const { id, name, description } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -291,10 +292,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   deleteRole: createAuthEndpoint(
-    '/role/:id',
+    '/tenancy/role/delete',
     {
-      method: 'DELETE',
-      params: z.object({ id: z.string() }),
+      method: 'POST',
+      body: z.object({
+        id: z.string()
+      }),
       metadata: {
         openapi: {
           summary: 'Delete role',
@@ -307,7 +310,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      const { id } = ctx.params
+      const { id } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -344,14 +347,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   listRoles: createAuthEndpoint(
-    '/role/list/:contextType/:contextId',
+    '/tenancy/role/list',
     {
       method: 'GET',
-      params: z.object({
+      query: z.object({
         contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
-      }),
-      query: z.object({
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
       }),
@@ -369,8 +370,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.role?.list, ctx, session)
 
-      const { contextType, contextId } = ctx.params
-      const { limit = 50, offset = 0 } = ctx.query
+      const { contextType, contextId, limit = 50, offset = 0 } = ctx.query
 
       const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
       const field = contextType === 'organization' ? 'organizationId' : 'teamId'
@@ -391,11 +391,11 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   addStatementToRole: createAuthEndpoint(
-    '/role/:id/statement',
+    '/tenancy/role/statement/add',
     {
       method: 'POST',
-      params: z.object({ id: z.string() }),
       body: z.object({
+        id: z.string(),
         statementId: z.string(),
         addedBy: z.string(),
       }),
@@ -407,8 +407,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      const { id } = ctx.params
-      const { statementId, addedBy } = ctx.body
+      const { id, statementId, addedBy } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -450,14 +449,14 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
   ),
 
   removeStatementFromRole: createAuthEndpoint(
-    '/role/:id/statement/:statementId',
+    '/tenancy/role/statement/remove',
     {
-      method: 'DELETE',
-      params: z.object({
+      method: 'POST',
+      body: z.object({
         id: z.string(),
         statementId: z.string(),
+        removedBy: z.string()
       }),
-      body: z.object({ removedBy: z.string() }),
       metadata: {
         openapi: {
           summary: 'Remove statement from role',
@@ -466,8 +465,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      const { id, statementId } = ctx.params
-      const { removedBy } = ctx.body
+      const { id, statementId, removedBy } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
