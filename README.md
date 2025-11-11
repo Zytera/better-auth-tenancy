@@ -77,19 +77,15 @@ Define granular permissions:
 ```typescript
 // Define statements
 await authClient.tenancy.createStatement({
-  body: {
-    id: 'subteam:delete',
-  }
+  id: 'subteam:delete',
 })
 
 // Create role with statements
 await authClient.tenancy.createRole({
-  body: {
-    name: 'Team Manager',
-    contextType: 'team',
-    contextId: teamId,
-    statements: ['subteam:create', 'subteam:delete', 'member:add'],
-  }
+  name: 'Team Manager',
+  contextType: 'team',
+  contextId: teamId,
+  statements: ['subteam:create', 'subteam:delete', 'member:add'],
 })
 ```
 
@@ -99,14 +95,12 @@ Grant time-limited access:
 
 ```typescript
 await authClient.tenancy.grantPermission({
-  body: {
-    userId,
-    statementId: 'billing:manage',
-    contextType: 'organization',
-    contextId: orgId,
-    expiresAt: new Date('2024-12-31'), // Expires on this date
-    grantedBy: adminId
-  }
+  userId,
+  statementId: 'billing:manage',
+  contextType: 'organization',
+  contextId: orgId,
+  expiresAt: new Date('2024-12-31'), // Expires on this date
+  grantedBy: adminId
 })
 ```
 
@@ -117,21 +111,17 @@ Built-in invitation workflow:
 ```typescript
 // Create invitation
 const invitation = await authClient.tenancy.createInvitation({
-  body: {
-    email: 'user@example.com',
-    contextType: 'team',
-    contextId: teamId,
-    roleId: editorRoleId,
-    invitedBy: adminId,
-    expiresInHours: 72
-  }
+  email: 'user@example.com',
+  contextType: 'team',
+  contextId: teamId,
+  roleId: editorRoleId,
+  invitedBy: adminId,
+  expiresInHours: 72
 })
 
 // Accept invitation
 await authClient.tenancy.acceptInvitation({
-  body: {
-    token: invitation.token
-  }
+  token: invitation.token
 })
 ```
 
@@ -393,38 +383,28 @@ Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on 
 ```typescript
 // Create organization
 const org = await authClient.tenancy.createOrganization({
-  body: {
-    name: 'Acme Corp',
-    slug: 'acme-corp',
-  }
+  name: 'Acme Corp',
+  slug: 'acme-corp',
 })
 
 // Create statements
-await authClient.tenancy.createStatement({
-  body: { id: 'team:create' }
-})
-await authClient.tenancy.createStatement({
-  body: { id: 'team:delete' }
-})
+await authClient.tenancy.createStatement({ id: 'team:create' })
+await authClient.tenancy.createStatement({ id: 'team:delete' })
 
 // Create organization role
 const adminRole = await authClient.tenancy.createRole({
-  body: {
-    name: 'Admin',
-    contextType: 'organization',
-    contextId: org.id,
-    statements: ['team:create', 'team:delete'],
-  }
+  name: 'Admin',
+  contextType: 'organization',
+  contextId: org.id,
+  statements: ['team:create', 'team:delete'],
 })
 
 // Add member with role
 await authClient.tenancy.addMember({
-  body: {
-    userId: newUserId,
-    contextType: 'organization',
-    contextId: org.id,
-    roleId: adminRole.id,
-  }
+  userId: newUserId,
+  contextType: 'organization',
+  contextId: org.id,
+  roleId: adminRole.id,
 })
 ```
 
@@ -446,9 +426,7 @@ Statements are the atomic units of permission. They represent a single action on
 
 ```typescript
 await authClient.tenancy.createStatement({
-  body: {
-    id: 'document:publish',
-  }
+  id: 'document:publish',
 })
 
 // Add translations for i18n (endpoint to be added in future versions)
@@ -468,32 +446,28 @@ Roles are collections of statements that can be assigned to users.
 ```typescript
 // Organization role
 await authClient.tenancy.createRole({
-  body: {
-    name: 'Billing Manager',
-    description: 'Manages billing and subscriptions',
-    contextType: 'organization',
-    contextId: orgId,
-    statements: [
-      'billing:view',
-      'billing:update',
-      'subscription:manage',
-    ],
-  }
+  name: 'Billing Manager',
+  description: 'Manages billing and subscriptions',
+  contextType: 'organization',
+  contextId: orgId,
+  statements: [
+    'billing:view',
+    'billing:update',
+    'subscription:manage',
+  ],
 })
 
 // Team custom role
 await authClient.tenancy.createRole({
-  body: {
-    name: 'Content Editor',
-    description: 'Can edit and publish content',
-    contextType: 'team',
-    contextId: teamId,
-    statements: [
-      'content:create',
-      'content:edit',
-      'content:publish',
-    ],
-  }
+  name: 'Content Editor',
+  description: 'Can edit and publish content',
+  contextType: 'team',
+  contextId: teamId,
+  statements: [
+    'content:create',
+    'content:edit',
+    'content:publish',
+  ],
 })
 ```
 
@@ -504,22 +478,18 @@ Members represent users assigned to contexts with specific roles.
 ```typescript
 // Add to organization
 await authClient.tenancy.addMember({
-  body: {
-    userId: user.id,
-    contextType: 'organization',
-    contextId: org.id,
-    roleId: adminRoleId,
-  }
+  userId: user.id,
+  contextType: 'organization',
+  contextId: org.id,
+  roleId: adminRoleId,
 })
 
 // Add to team with custom role
 await authClient.tenancy.addMember({
-  body: {
-    userId: user.id,
-    contextType: 'team',
-    contextId: team.id,
-    roleId: editorRoleId,
-  }
+  userId: user.id,
+  contextType: 'team',
+  contextId: team.id,
+  roleId: editorRoleId,
 })
 ```
 
@@ -529,12 +499,10 @@ Check if a user has permission:
 
 ```typescript
 const result = await authClient.tenancy.checkPermission({
-  body: {
-    userId: user.id,
-    statementId: 'team:delete',
-    contextType: 'team',
-    contextId: team.id,
-  }
+  userId: user.id,
+  statementId: 'team:delete',
+  contextType: 'team',
+  contextId: team.id,
 })
 
 if (result.allowed) {
@@ -550,25 +518,21 @@ Override role-based permissions:
 ```typescript
 // Grant temporary permission (24 hours)
 await authClient.tenancy.grantPermission({
-  body: {
-    userId: user.id,
-    statementId: 'deploy:production',
-    contextType: 'team',
-    contextId: team.id,
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    grantedBy: adminId,
-  }
+  userId: user.id,
+  statementId: 'deploy:production',
+  contextType: 'team',
+  contextId: team.id,
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  grantedBy: adminId,
 })
 
 // Deny permission (highest priority)
 await authClient.tenancy.denyPermission({
-  body: {
-    userId: user.id,
-    statementId: 'sensitive:data',
-    contextType: 'organization',
-    contextId: org.id,
-    deniedBy: adminId,
-  }
+  userId: user.id,
+  statementId: 'sensitive:data',
+  contextType: 'organization',
+  contextId: org.id,
+  deniedBy: adminId,
 })
 ```
 
@@ -576,79 +540,79 @@ await authClient.tenancy.denyPermission({
 
 ### Client Methods
 
-All endpoints are automatically inferred from the server plugin using `$InferServerPlugin`. Method names come from the endpoint keys defined in the server plugin:
+All methods are exposed through `getActions` for a clean, type-safe API without wrapper objects:
 
 ```typescript
 // Organizations
-authClient.tenancy.createOrganization({ body: { name, slug, metadata? } })
-authClient.tenancy.getOrganization({ params: { id } })
-authClient.tenancy.getOrganizationBySlug({ params: { slug } })
-authClient.tenancy.updateOrganization({ body: { id, name?, slug?, metadata? } })
-authClient.tenancy.deleteOrganization({ body: { id } })
-authClient.tenancy.listOrganizations({ query: { limit?, offset?, orderBy?, orderDirection? } })
+authClient.tenancy.createOrganization({ name, slug, metadata? })
+authClient.tenancy.getOrganization({ id })
+authClient.tenancy.getOrganizationBySlug({ slug })
+authClient.tenancy.updateOrganization({ id, name?, slug?, metadata? })
+authClient.tenancy.deleteOrganization({ id })
+authClient.tenancy.listOrganizations({ limit?, offset?, orderBy?, orderDirection? })
 
 // Teams
-authClient.tenancy.createTeam({ body: { organizationId, name, slug, metadata? } })
-authClient.tenancy.getTeam({ params: { id } })
-authClient.tenancy.getTeamBySlug({ params: { organizationId, slug } })
-authClient.tenancy.updateTeam({ body: { id, name?, slug?, metadata? } })
-authClient.tenancy.deleteTeam({ body: { id } })
-authClient.tenancy.listTeamsByOrganization({ query: { organizationId, limit?, offset?, orderBy?, orderDirection? } })
+authClient.tenancy.createTeam({ organizationId, name, slug, metadata? })
+authClient.tenancy.getTeam({ id })
+authClient.tenancy.getTeamBySlug({ organizationId, slug })
+authClient.tenancy.updateTeam({ id, name?, slug?, metadata? })
+authClient.tenancy.deleteTeam({ id })
+authClient.tenancy.listTeamsByOrganization({ organizationId, limit?, offset?, orderBy?, orderDirection? })
 
 // Subteams
-authClient.tenancy.createSubteam({ body: { teamId, name, slug, metadata? } })
-authClient.tenancy.getSubteam({ params: { id } })
-authClient.tenancy.updateSubteam({ body: { id, name?, slug?, metadata? } })
-authClient.tenancy.deleteSubteam({ body: { id } })
-authClient.tenancy.listSubteamsByTeam({ query: { teamId, limit?, offset?, orderBy?, orderDirection? } })
+authClient.tenancy.createSubteam({ teamId, name, slug, metadata? })
+authClient.tenancy.getSubteam({ id })
+authClient.tenancy.updateSubteam({ id, name?, slug?, metadata? })
+authClient.tenancy.deleteSubteam({ id })
+authClient.tenancy.listSubteamsByTeam({ teamId, limit?, offset?, orderBy?, orderDirection? })
 
 // Statements
-authClient.tenancy.createStatement({ body: { id } })
-authClient.tenancy.getStatement({ params: { id } })
-authClient.tenancy.updateStatement({ body: { id, category?, operation? } })
-authClient.tenancy.deleteStatement({ body: { id } })
-authClient.tenancy.listStatements({ query: { limit?, offset?, orderBy?, orderDirection? } })
-authClient.tenancy.batchCreateStatements({ body: { statements, createdBy } })
+authClient.tenancy.createStatement({ id })
+authClient.tenancy.getStatement({ id })
+authClient.tenancy.updateStatement({ id, category?, operation? })
+authClient.tenancy.deleteStatement({ id })
+authClient.tenancy.listStatements({ limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.batchCreateStatements({ statements, createdBy })
 
 // Roles
-authClient.tenancy.createRole({ body: { name, contextType, contextId, statements?, description? } })
-authClient.tenancy.getRole({ params: { id } })
-authClient.tenancy.updateRole({ body: { id, name?, description? } })
-authClient.tenancy.deleteRole({ body: { id } })
-authClient.tenancy.listRoles({ query: { contextType, contextId, limit?, offset?, orderBy?, orderDirection? } })
-authClient.tenancy.addStatementToRole({ body: { id, statementId, addedBy } })
-authClient.tenancy.removeStatementFromRole({ body: { id, statementId, removedBy } })
+authClient.tenancy.createRole({ name, contextType, contextId, statements?, description? })
+authClient.tenancy.getRole({ id })
+authClient.tenancy.updateRole({ id, name?, description? })
+authClient.tenancy.deleteRole({ id })
+authClient.tenancy.listRoles({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.addStatementToRole({ id, statementId, addedBy })
+authClient.tenancy.removeStatementFromRole({ id, statementId, removedBy })
 
 // Members
-authClient.tenancy.addMember({ body: { userId, contextType, contextId, roleId?, metadata? } })
-authClient.tenancy.getMember({ params: { id } })
-authClient.tenancy.updateMemberRole({ body: { id, roleId, updatedBy } })
-authClient.tenancy.updateMemberMetadata({ body: { id, metadata, updatedBy } })
-authClient.tenancy.removeMember({ body: { id, removedBy } })
-authClient.tenancy.listMembers({ query: { contextType, contextId, limit?, offset?, orderBy?, orderDirection? } })
-authClient.tenancy.getUserMemberships({ query: { userId, contextType?, limit?, offset? } })
-authClient.tenancy.checkMembership({ body: { userId, contextType, contextId } })
+authClient.tenancy.addMember({ userId, contextType, contextId, roleId?, metadata? })
+authClient.tenancy.getMember({ id })
+authClient.tenancy.updateMemberRole({ id, roleId, updatedBy })
+authClient.tenancy.updateMemberMetadata({ id, metadata, updatedBy })
+authClient.tenancy.removeMember({ id, removedBy })
+authClient.tenancy.listMembers({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.getUserMemberships({ userId, contextType?, limit?, offset? })
+authClient.tenancy.checkMembership({ userId, contextType, contextId })
 
 // Permissions
-authClient.tenancy.grantPermission({ body: { userId, statementId, contextType, contextId, expiresAt?, grantedBy } })
-authClient.tenancy.denyPermission({ body: { userId, statementId, contextType, contextId, deniedBy } })
-authClient.tenancy.revokePermission({ body: { userId, statementId, contextType, contextId, revokedBy } })
-authClient.tenancy.checkPermission({ body: { userId, statementId, contextType, contextId } })
-authClient.tenancy.listGrants({ query: { userId, limit?, offset? } })
-authClient.tenancy.listDenies({ query: { userId, limit?, offset? } })
-authClient.tenancy.grantBatch({ body: { grants, grantedBy } })
-authClient.tenancy.denyBatch({ body: { denies, deniedBy } })
+authClient.tenancy.grantPermission({ userId, statementId, contextType, contextId, expiresAt?, grantedBy })
+authClient.tenancy.denyPermission({ userId, statementId, contextType, contextId, deniedBy })
+authClient.tenancy.revokePermission({ userId, statementId, contextType, contextId, revokedBy })
+authClient.tenancy.checkPermission({ userId, statementId, contextType, contextId })
+authClient.tenancy.listGrants({ userId, limit?, offset? })
+authClient.tenancy.listDenies({ userId, limit?, offset? })
+authClient.tenancy.grantBatch({ grants, grantedBy })
+authClient.tenancy.denyBatch({ denies, deniedBy })
 
 // Invitations
-authClient.tenancy.createInvitation({ body: { email, contextType, contextId, roleId?, expiresInHours?, invitedBy } })
-authClient.tenancy.acceptInvitation({ body: { token } })
-authClient.tenancy.rejectInvitation({ body: { token, userId } })
-authClient.tenancy.cancelInvitation({ body: { id, canceledBy } })
-authClient.tenancy.getInvitationByToken({ params: { token } })
-authClient.tenancy.getInvitationByCode({ params: { code } })
-authClient.tenancy.listInvitations({ query: { contextType, contextId, limit?, offset?, status?, orderBy?, orderDirection? } })
-authClient.tenancy.getInvitationsByIdentifier({ query: { identifier } })
-authClient.tenancy.cleanupExpiredInvitations({ body: {} })
+authClient.tenancy.createInvitation({ email, contextType, contextId, roleId?, expiresInHours?, invitedBy })
+authClient.tenancy.acceptInvitation({ token })
+authClient.tenancy.rejectInvitation({ token, userId })
+authClient.tenancy.cancelInvitation({ id, canceledBy })
+authClient.tenancy.getInvitationByToken({ token })
+authClient.tenancy.getInvitationByCode({ code })
+authClient.tenancy.listInvitations({ contextType, contextId, limit?, offset?, status?, orderBy?, orderDirection? })
+authClient.tenancy.getInvitationsByIdentifier({ identifier })
+authClient.tenancy.cleanupExpiredInvitations()
 ```
 
 ### Endpoint Structure
@@ -715,9 +679,10 @@ const authClient = createAuthClient({
   ]
 })
 
-// All endpoints are automatically inferred!
+// All methods are exposed through getActions!
 await authClient.tenancy.createOrganization({
-  body: { name: 'My Org', slug: 'my-org' }
+  name: 'My Org',
+  slug: 'my-org'
 })
 ```
 
@@ -745,7 +710,9 @@ const authClient = createAuthClient({
 
 // Same API as web!
 await authClient.tenancy.createTeam({
-  body: { organizationId: 'org-id', name: 'My Team', slug: 'my-team' }
+  organizationId: 'org-id',
+  name: 'My Team',
+  slug: 'my-team'
 })
 ```
 
@@ -782,61 +749,47 @@ The client uses Better Auth's `$InferServerPlugin` to automatically generate Typ
 ```typescript
 // Setup for "Acme Corp" tenant
 const org = await authClient.tenancy.createOrganization({
-  body: {
-    name: 'Acme Corp',
-    slug: 'acme-corp',
-  }
+  name: 'Acme Corp',
+  slug: 'acme-corp',
 })
 
 // Create departments as teams
 const engineering = await authClient.tenancy.createTeam({
-  body: {
-    organizationId: org.id,
-    name: 'Engineering',
-    slug: 'engineering',
-  }
+  organizationId: org.id,
+  name: 'Engineering',
+  slug: 'engineering',
 })
 
 // Create sub-teams
 const frontend = await authClient.tenancy.createSubteam({
-  body: {
-    teamId: engineering.id,
-    name: 'Frontend',
-    slug: 'frontend',
-  }
+  teamId: engineering.id,
+  name: 'Frontend',
+  slug: 'frontend',
 })
 
 // Define permissions
 await authClient.tenancy.createStatement({
-  body: {
-    id: 'code:commit',
-  }
+  id: 'code:commit',
 })
 
 await authClient.tenancy.createStatement({
-  body: {
-    id: 'code:review',
-  }
+  id: 'code:review',
 })
 
 // Create role
 const seniorEngineer = await authClient.tenancy.createRole({
-  body: {
-    name: 'Senior Engineer',
-    contextType: 'team',
-    contextId: engineering.id,
-    statements: ['code:commit', 'code:review'],
-  }
+  name: 'Senior Engineer',
+  contextType: 'team',
+  contextId: engineering.id,
+  statements: ['code:commit', 'code:review'],
 })
 
 // Add team member
 await authClient.tenancy.addMember({
-  body: {
-    userId: developerId,
-    contextType: 'team',
-    contextId: engineering.id,
-    roleId: seniorEngineer.id,
-  }
+  userId: developerId,
+  contextType: 'team',
+  contextId: engineering.id,
+  roleId: seniorEngineer.id,
 })
 ```
 
@@ -845,14 +798,12 @@ await authClient.tenancy.addMember({
 ```typescript
 // Create invitation for new team member
 const invitation = await authClient.tenancy.createInvitation({
-  body: {
-    email: 'newdev@example.com',
-    contextType: 'team',
-    contextId: engineeringTeamId,
-    roleId: developerRoleId,
-    expiresInHours: 72,
-    invitedBy: adminId,
-  }
+  email: 'newdev@example.com',
+  contextType: 'team',
+  contextId: engineeringTeamId,
+  roleId: developerRoleId,
+  expiresInHours: 72,
+  invitedBy: adminId,
 })
 
 // Send email with invitation link
@@ -864,15 +815,11 @@ await sendEmail({
 
 // When user accepts
 await authClient.tenancy.acceptInvitation({
-  body: {
-    token: invitation.token
-  }
+  token: invitation.token
 })
 
 // Cleanup expired invitations (run as cron job)
-await authClient.tenancy.cleanupExpiredInvitations({
-  body: {}
-})
+await authClient.tenancy.cleanupExpiredInvitations()
 ```
 
 ### Example 3: React Native/Expo App
@@ -900,9 +847,7 @@ function App() {
 
   useEffect(() => {
     async function loadOrgs() {
-      const result = await authClient.tenancy.listOrganizations({
-        query: {}
-      })
+      const result = await authClient.tenancy.listOrganizations()
       setOrgs(result.items)
     }
     loadOrgs()
