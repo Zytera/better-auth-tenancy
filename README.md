@@ -76,12 +76,12 @@ Define granular permissions:
 
 ```typescript
 // Define statements
-await authClient.tenancy.createStatement({
+await authClient.tenancy.statement.create({
   id: 'subteam:delete',
 })
 
 // Create role with statements
-await authClient.tenancy.createRole({
+await authClient.tenancy.role.create({
   name: 'Team Manager',
   contextType: 'team',
   contextId: teamId,
@@ -94,7 +94,7 @@ await authClient.tenancy.createRole({
 Grant time-limited access:
 
 ```typescript
-await authClient.tenancy.grantPermission({
+await authClient.tenancy.permission.grant({
   userId,
   statementId: 'billing:manage',
   contextType: 'organization',
@@ -110,7 +110,7 @@ Built-in invitation workflow:
 
 ```typescript
 // Create invitation
-const invitation = await authClient.tenancy.createInvitation({
+const invitation = await authClient.tenancy.invitation.create({
   email: 'user@example.com',
   contextType: 'team',
   contextId: teamId,
@@ -120,7 +120,7 @@ const invitation = await authClient.tenancy.createInvitation({
 })
 
 // Accept invitation
-await authClient.tenancy.acceptInvitation({
+await authClient.tenancy.invitation.accept({
   token: invitation.token
 })
 ```
@@ -382,17 +382,17 @@ Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on 
 
 ```typescript
 // Create organization
-const org = await authClient.tenancy.createOrganization({
+const org = await authClient.tenancy.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
 })
 
 // Create statements
-await authClient.tenancy.createStatement({ id: 'team:create' })
-await authClient.tenancy.createStatement({ id: 'team:delete' })
+await authClient.tenancy.statement.create({ id: 'team:create' })
+await authClient.tenancy.statement.create({ id: 'team:delete' })
 
 // Create organization role
-const adminRole = await authClient.tenancy.createRole({
+const adminRole = await authClient.tenancy.role.create({
   name: 'Admin',
   contextType: 'organization',
   contextId: org.id,
@@ -400,7 +400,7 @@ const adminRole = await authClient.tenancy.createRole({
 })
 
 // Add member with role
-await authClient.tenancy.addMember({
+await authClient.tenancy.member.add({
   userId: newUserId,
   contextType: 'organization',
   contextId: org.id,
@@ -425,7 +425,7 @@ Statements are the atomic units of permission. They represent a single action on
 **Creating statements**:
 
 ```typescript
-await authClient.tenancy.createStatement({
+await authClient.tenancy.statement.create({
   id: 'document:publish',
 })
 
@@ -445,7 +445,7 @@ Roles are collections of statements that can be assigned to users.
 
 ```typescript
 // Organization role
-await authClient.tenancy.createRole({
+await authClient.tenancy.role.create({
   name: 'Billing Manager',
   description: 'Manages billing and subscriptions',
   contextType: 'organization',
@@ -458,7 +458,7 @@ await authClient.tenancy.createRole({
 })
 
 // Team custom role
-await authClient.tenancy.createRole({
+await authClient.tenancy.role.create({
   name: 'Content Editor',
   description: 'Can edit and publish content',
   contextType: 'team',
@@ -477,7 +477,7 @@ Members represent users assigned to contexts with specific roles.
 
 ```typescript
 // Add to organization
-await authClient.tenancy.addMember({
+await authClient.tenancy.member.add({
   userId: user.id,
   contextType: 'organization',
   contextId: org.id,
@@ -485,7 +485,7 @@ await authClient.tenancy.addMember({
 })
 
 // Add to team with custom role
-await authClient.tenancy.addMember({
+await authClient.tenancy.member.add({
   userId: user.id,
   contextType: 'team',
   contextId: team.id,
@@ -498,7 +498,7 @@ await authClient.tenancy.addMember({
 Check if a user has permission:
 
 ```typescript
-const result = await authClient.tenancy.checkPermission({
+const result = await authClient.tenancy.permission.check({
   userId: user.id,
   statementId: 'team:delete',
   contextType: 'team',
@@ -517,7 +517,7 @@ Override role-based permissions:
 
 ```typescript
 // Grant temporary permission (24 hours)
-await authClient.tenancy.grantPermission({
+await authClient.tenancy.permission.grant({
   userId: user.id,
   statementId: 'deploy:production',
   contextType: 'team',
@@ -527,7 +527,7 @@ await authClient.tenancy.grantPermission({
 })
 
 // Deny permission (highest priority)
-await authClient.tenancy.denyPermission({
+await authClient.tenancy.permission.deny({
   userId: user.id,
   statementId: 'sensitive:data',
   contextType: 'organization',
@@ -540,79 +540,79 @@ await authClient.tenancy.denyPermission({
 
 ### Client Methods
 
-All methods are exposed through `getActions` for a clean, type-safe API without wrapper objects:
+All methods are exposed through `getActions` with a RESTful domain.action structure:
 
 ```typescript
 // Organizations
-authClient.tenancy.createOrganization({ name, slug, metadata? })
-authClient.tenancy.getOrganization({ id })
-authClient.tenancy.getOrganizationBySlug({ slug })
-authClient.tenancy.updateOrganization({ id, name?, slug?, metadata? })
-authClient.tenancy.deleteOrganization({ id })
-authClient.tenancy.listOrganizations({ limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.organization.create({ name, slug, metadata? })
+authClient.tenancy.organization.get({ id })
+authClient.tenancy.organization.getBySlug({ slug })
+authClient.tenancy.organization.update({ id, name?, slug?, metadata? })
+authClient.tenancy.organization.delete({ id })
+authClient.tenancy.organization.list({ limit?, offset?, orderBy?, orderDirection? })
 
 // Teams
-authClient.tenancy.createTeam({ organizationId, name, slug, metadata? })
-authClient.tenancy.getTeam({ id })
-authClient.tenancy.getTeamBySlug({ organizationId, slug })
-authClient.tenancy.updateTeam({ id, name?, slug?, metadata? })
-authClient.tenancy.deleteTeam({ id })
-authClient.tenancy.listTeamsByOrganization({ organizationId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.team.create({ organizationId, name, slug, metadata? })
+authClient.tenancy.team.get({ id })
+authClient.tenancy.team.getBySlug({ organizationId, slug })
+authClient.tenancy.team.update({ id, name?, slug?, metadata? })
+authClient.tenancy.team.delete({ id })
+authClient.tenancy.team.list({ organizationId, limit?, offset?, orderBy?, orderDirection? })
 
 // Subteams
-authClient.tenancy.createSubteam({ teamId, name, slug, metadata? })
-authClient.tenancy.getSubteam({ id })
-authClient.tenancy.updateSubteam({ id, name?, slug?, metadata? })
-authClient.tenancy.deleteSubteam({ id })
-authClient.tenancy.listSubteamsByTeam({ teamId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.subteam.create({ teamId, name, slug, metadata? })
+authClient.tenancy.subteam.get({ id })
+authClient.tenancy.subteam.update({ id, name?, slug?, metadata? })
+authClient.tenancy.subteam.delete({ id })
+authClient.tenancy.subteam.list({ teamId, limit?, offset?, orderBy?, orderDirection? })
 
 // Statements
-authClient.tenancy.createStatement({ id })
-authClient.tenancy.getStatement({ id })
-authClient.tenancy.updateStatement({ id, category?, operation? })
-authClient.tenancy.deleteStatement({ id })
-authClient.tenancy.listStatements({ limit?, offset?, orderBy?, orderDirection? })
-authClient.tenancy.batchCreateStatements({ statements, createdBy })
+authClient.tenancy.statement.create({ id })
+authClient.tenancy.statement.get({ id })
+authClient.tenancy.statement.update({ id, category?, operation? })
+authClient.tenancy.statement.delete({ id })
+authClient.tenancy.statement.list({ limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.statement.batchCreate({ statements, createdBy })
 
 // Roles
-authClient.tenancy.createRole({ name, contextType, contextId, statements?, description? })
-authClient.tenancy.getRole({ id })
-authClient.tenancy.updateRole({ id, name?, description? })
-authClient.tenancy.deleteRole({ id })
-authClient.tenancy.listRoles({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
-authClient.tenancy.addStatementToRole({ id, statementId, addedBy })
-authClient.tenancy.removeStatementFromRole({ id, statementId, removedBy })
+authClient.tenancy.role.create({ name, contextType, contextId, statements?, description? })
+authClient.tenancy.role.get({ id })
+authClient.tenancy.role.update({ id, name?, description? })
+authClient.tenancy.role.delete({ id })
+authClient.tenancy.role.list({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.role.addStatement({ id, statementId, addedBy })
+authClient.tenancy.role.removeStatement({ id, statementId, removedBy })
 
 // Members
-authClient.tenancy.addMember({ userId, contextType, contextId, roleId?, metadata? })
-authClient.tenancy.getMember({ id })
-authClient.tenancy.updateMemberRole({ id, roleId, updatedBy })
-authClient.tenancy.updateMemberMetadata({ id, metadata, updatedBy })
-authClient.tenancy.removeMember({ id, removedBy })
-authClient.tenancy.listMembers({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
-authClient.tenancy.getUserMemberships({ userId, contextType?, limit?, offset? })
-authClient.tenancy.checkMembership({ userId, contextType, contextId })
+authClient.tenancy.member.add({ userId, contextType, contextId, roleId?, metadata? })
+authClient.tenancy.member.get({ id })
+authClient.tenancy.member.updateRole({ id, roleId, updatedBy })
+authClient.tenancy.member.updateMetadata({ id, metadata, updatedBy })
+authClient.tenancy.member.remove({ id, removedBy })
+authClient.tenancy.member.list({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.member.getUserMemberships({ userId, contextType?, limit?, offset? })
+authClient.tenancy.member.check({ userId, contextType, contextId })
 
 // Permissions
-authClient.tenancy.grantPermission({ userId, statementId, contextType, contextId, expiresAt?, grantedBy })
-authClient.tenancy.denyPermission({ userId, statementId, contextType, contextId, deniedBy })
-authClient.tenancy.revokePermission({ userId, statementId, contextType, contextId, revokedBy })
-authClient.tenancy.checkPermission({ userId, statementId, contextType, contextId })
-authClient.tenancy.listGrants({ userId, limit?, offset? })
-authClient.tenancy.listDenies({ userId, limit?, offset? })
-authClient.tenancy.grantBatch({ grants, grantedBy })
-authClient.tenancy.denyBatch({ denies, deniedBy })
+authClient.tenancy.permission.grant({ userId, statementId, contextType, contextId, expiresAt?, grantedBy })
+authClient.tenancy.permission.deny({ userId, statementId, contextType, contextId, deniedBy })
+authClient.tenancy.permission.revoke({ userId, statementId, contextType, contextId, revokedBy })
+authClient.tenancy.permission.check({ userId, statementId, contextType, contextId })
+authClient.tenancy.permission.listGrants({ userId, limit?, offset? })
+authClient.tenancy.permission.listDenies({ userId, limit?, offset? })
+authClient.tenancy.permission.grantBatch({ grants, grantedBy })
+authClient.tenancy.permission.denyBatch({ denies, deniedBy })
 
 // Invitations
-authClient.tenancy.createInvitation({ email, contextType, contextId, roleId?, expiresInHours?, invitedBy })
-authClient.tenancy.acceptInvitation({ token })
-authClient.tenancy.rejectInvitation({ token, userId })
-authClient.tenancy.cancelInvitation({ id, canceledBy })
-authClient.tenancy.getInvitationByToken({ token })
-authClient.tenancy.getInvitationByCode({ code })
-authClient.tenancy.listInvitations({ contextType, contextId, limit?, offset?, status?, orderBy?, orderDirection? })
-authClient.tenancy.getInvitationsByIdentifier({ identifier })
-authClient.tenancy.cleanupExpiredInvitations()
+authClient.tenancy.invitation.create({ email, contextType, contextId, roleId?, expiresInHours?, invitedBy })
+authClient.tenancy.invitation.accept({ token })
+authClient.tenancy.invitation.reject({ token, userId })
+authClient.tenancy.invitation.cancel({ id, canceledBy })
+authClient.tenancy.invitation.getByToken({ token })
+authClient.tenancy.invitation.getByCode({ code })
+authClient.tenancy.invitation.list({ contextType, contextId, limit?, offset?, status?, orderBy?, orderDirection? })
+authClient.tenancy.invitation.getByIdentifier({ identifier })
+authClient.tenancy.invitation.cleanupExpired()
 ```
 
 ### Endpoint Structure
@@ -680,7 +680,7 @@ const authClient = createAuthClient({
 })
 
 // All methods are exposed through getActions!
-await authClient.tenancy.createOrganization({
+await authClient.tenancy.organization.create({
   name: 'My Org',
   slug: 'my-org'
 })
@@ -709,7 +709,7 @@ const authClient = createAuthClient({
 })
 
 // Same API as web!
-await authClient.tenancy.createTeam({
+await authClient.tenancy.team.create({
   organizationId: 'org-id',
   name: 'My Team',
   slug: 'my-team'
@@ -736,11 +736,12 @@ interface TenancyClientConfig {
 
 ### How It Works
 
-The client uses Better Auth's `$InferServerPlugin` to automatically generate TypeScript types and runtime methods from your server plugin. Method names come from the endpoint keys in the server plugin:
+The client uses `getActions` to provide a clean, RESTful API structure. All methods are organized by domain:
 
-- `createOrganization` endpoint → `authClient.tenancy.createOrganization()`
-- `getOrganization` endpoint → `authClient.tenancy.getOrganization()`
-- `listTeamsByOrganization` endpoint → `authClient.tenancy.listTeamsByOrganization()`
+- Organizations: `authClient.tenancy.organization.create()`, `.get()`, `.list()`
+- Teams: `authClient.tenancy.team.create()`, `.get()`, `.list()`
+- Members: `authClient.tenancy.member.add()`, `.get()`, `.list()`
+- Permissions: `authClient.tenancy.permission.grant()`, `.deny()`, `.check()`
 
 ## 📖 Examples
 
@@ -748,36 +749,36 @@ The client uses Better Auth's `$InferServerPlugin` to automatically generate Typ
 
 ```typescript
 // Setup for "Acme Corp" tenant
-const org = await authClient.tenancy.createOrganization({
+const org = await authClient.tenancy.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
 })
 
 // Create departments as teams
-const engineering = await authClient.tenancy.createTeam({
+const engineering = await authClient.tenancy.team.create({
   organizationId: org.id,
   name: 'Engineering',
   slug: 'engineering',
 })
 
 // Create sub-teams
-const frontend = await authClient.tenancy.createSubteam({
+const frontend = await authClient.tenancy.subteam.create({
   teamId: engineering.id,
   name: 'Frontend',
   slug: 'frontend',
 })
 
 // Define permissions
-await authClient.tenancy.createStatement({
+await authClient.tenancy.statement.create({
   id: 'code:commit',
 })
 
-await authClient.tenancy.createStatement({
+await authClient.tenancy.statement.create({
   id: 'code:review',
 })
 
 // Create role
-const seniorEngineer = await authClient.tenancy.createRole({
+const seniorEngineer = await authClient.tenancy.role.create({
   name: 'Senior Engineer',
   contextType: 'team',
   contextId: engineering.id,
@@ -785,7 +786,7 @@ const seniorEngineer = await authClient.tenancy.createRole({
 })
 
 // Add team member
-await authClient.tenancy.addMember({
+await authClient.tenancy.member.add({
   userId: developerId,
   contextType: 'team',
   contextId: engineering.id,
@@ -797,7 +798,7 @@ await authClient.tenancy.addMember({
 
 ```typescript
 // Create invitation for new team member
-const invitation = await authClient.tenancy.createInvitation({
+const invitation = await authClient.tenancy.invitation.create({
   email: 'newdev@example.com',
   contextType: 'team',
   contextId: engineeringTeamId,
@@ -814,12 +815,12 @@ await sendEmail({
 })
 
 // When user accepts
-await authClient.tenancy.acceptInvitation({
+await authClient.tenancy.invitation.accept({
   token: invitation.token
 })
 
 // Cleanup expired invitations (run as cron job)
-await authClient.tenancy.cleanupExpiredInvitations()
+await authClient.tenancy.invitation.cleanupExpired()
 ```
 
 ### Example 3: React Native/Expo App
@@ -847,7 +848,7 @@ function App() {
 
   useEffect(() => {
     async function loadOrgs() {
-      const result = await authClient.tenancy.listOrganizations()
+      const result = await authClient.tenancy.organization.list()
       setOrgs(result.items)
     }
     loadOrgs()
