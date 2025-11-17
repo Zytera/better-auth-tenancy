@@ -64,14 +64,6 @@ export const invitationSchema = z.object({
   status: invitationStatusSchema.default('pending'),
 
   /**
-   * Optional: Maximum number of times this invitation can be used
-   * Useful for creating "team join links" that multiple people can use
-   * null = single use (default)
-   */
-  maxUses: z.number().int().positive().nullish(),
-  usedCount: z.number().int().default(0),
-
-  /**
    * Timestamps
    */
   expiresAt: z.date().nullish(), // null = never expires

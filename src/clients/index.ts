@@ -355,7 +355,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     batchCreate: async (
-                        data: { statements: string[]; createdBy: string },
+                        data: { statements: string[] },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/statement/batch-create', {
@@ -442,7 +442,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     addStatement: async (
-                        data: { id: string; statementId: string; addedBy: string },
+                        data: { id: string; statementId: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/role/statement/add', {
@@ -453,7 +453,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     removeStatement: async (
-                        data: { id: string; statementId: string; removedBy: string },
+                        data: { id: string; statementId: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/role/statement/remove', {
@@ -590,8 +590,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                             statementId: string;
                             contextType: 'organization' | 'team' | 'subteam';
                             contextId: string;
-                            expiresAt?: Date;
-                            grantedBy: string
+                            expiresAt?: Date
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -607,8 +606,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                             userId: string;
                             statementId: string;
                             contextType: 'organization' | 'team' | 'subteam';
-                            contextId: string;
-                            deniedBy: string
+                            contextId: string
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -621,11 +619,8 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
 
                     revoke: async (
                         data: {
-                            userId: string;
-                            statementId: string;
-                            contextType: 'organization' | 'team' | 'subteam';
-                            contextId: string;
-                            revokedBy: string
+                            permissionId: string;
+                            type: 'grant' | 'deny'
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -690,8 +685,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                                 contextType: 'organization' | 'team' | 'subteam';
                                 contextId: string;
                                 expiresAt?: Date
-                            }>;
-                            grantedBy: string
+                            }>
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -709,8 +703,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                                 statementId: string;
                                 contextType: 'organization' | 'team' | 'subteam';
                                 contextId: string
-                            }>;
-                            deniedBy: string
+                            }>
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -725,12 +718,13 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                 invitation: {
                     create: async (
                         data: {
-                            email: string;
+                            identifier?: string;
                             contextType: 'organization' | 'team' | 'subteam';
                             contextId: string;
                             roleId?: string;
                             expiresInHours?: number;
-                            invitedBy: string
+                            generateCode?: boolean;
+                            metadata?: Record<string, unknown>
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -764,7 +758,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     cancel: async (
-                        data: { id: string; canceledBy: string },
+                        data: { token: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/invitation/cancel', {

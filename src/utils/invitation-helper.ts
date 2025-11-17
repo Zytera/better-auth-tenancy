@@ -89,10 +89,8 @@ export function isInvitationExpired(expiresAt: Date | null): boolean {
 export function canUseInvitation(invitation: {
   status: string
   expiresAt?: Date | null | undefined
-  maxUses?: number | null | undefined
-  usedCount: number
 }): { canUse: boolean; reason?: string } {
-  // Check status
+  // Check status - invitation can only be used if pending
   if (invitation.status !== 'pending') {
     return { canUse: false, reason: `Invitation is ${invitation.status}` }
   }
@@ -100,11 +98,6 @@ export function canUseInvitation(invitation: {
   // Check expiration
   if (isInvitationExpired(invitation.expiresAt ?? null)) {
     return { canUse: false, reason: 'Invitation has expired' }
-  }
-
-  // Check usage limit
-  if (invitation.maxUses != null && invitation.usedCount >= invitation.maxUses) {
-    return { canUse: false, reason: 'Invitation has reached maximum uses' }
   }
 
   return { canUse: true }

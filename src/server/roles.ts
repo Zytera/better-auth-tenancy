@@ -397,17 +397,20 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         id: z.string(),
         statementId: z.string(),
-        addedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Add statement to role',
-          description: 'Add a statement to a role',
+          description: 'Add a statement to a role (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      const { id, statementId, addedBy } = ctx.body
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const addedBy = session.user.id
+
+      const { id, statementId } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -419,7 +422,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       await applyEndpointAuth(config?.endpoints?.role?.addStatement, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const role = resource.data as OrganizationRole | TeamRole
       const isOrgRole = resource.contextType === 'organization'
@@ -455,17 +458,20 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         id: z.string(),
         statementId: z.string(),
-        removedBy: z.string()
       }),
       metadata: {
         openapi: {
           summary: 'Remove statement from role',
-          description: 'Remove a statement from a role',
+          description: 'Remove a statement from a role (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      const { id, statementId, removedBy } = ctx.body
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const removedBy = session.user.id
+
+      const { id, statementId } = ctx.body
 
       // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
@@ -477,7 +483,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       await applyEndpointAuth(config?.endpoints?.role?.removeStatement, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const role = resource.data as OrganizationRole | TeamRole
       const isOrgRole = resource.contextType === 'organization'

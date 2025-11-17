@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 import { _addMember } from './members'
 import {
   generateInvitationToken,
@@ -43,10 +43,9 @@ export interface CreateInvitationInput {
   contextType: ContextType
   contextId: string
   roleId?: string
-  invitedBy: string
+  // Note: invitedBy is automatically obtained from authenticated session
   expiresInHours?: number
   generateCode?: boolean
-  maxUses?: number
   metadata?: Record<string, unknown>
 }
 
@@ -64,24 +63,26 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
         roleId: z.string().optional(),
-        invitedBy: z.string(),
         expiresInHours: z.number().optional(), // undefined = never expires
         generateCode: z.boolean().optional(), // Generate short code
-        maxUses: z.number().int().positive().optional(), // For multi-use invitations
         metadata: z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
           summary: 'Create invitation',
-          description: 'Create a flexible invitation (email/phone/link/QR)',
+          description: 'Create a flexible invitation (email/phone/link/QR) (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.create, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const invitedBy = session.user.id
 
-      const { identifier, contextType, contextId, roleId, invitedBy, expiresInHours, generateCode, maxUses, metadata } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.invitation?.create, ctx, session)
+
+      const { identifier, contextType, contextId, roleId, expiresInHours, generateCode, metadata } = ctx.body
 
       // Check for existing pending invitation (only if identifier provided)
       if (identifier) {
@@ -120,8 +121,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           roleId: roleId || null,
           invitedBy,
           status: 'pending',
-          maxUses: maxUses || null,
-          usedCount: 0,
           expiresAt,
           metadata,
         },
@@ -296,18 +295,13 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         config
       )
 
-      // Update invitation
-      const isFirstUse = invitation.usedCount === 0
-      const newUsedCount = invitation.usedCount + 1
-      const shouldMarkAccepted = invitation.maxUses == null || newUsedCount >= invitation.maxUses
-
+      // Update invitation - mark as accepted
       const updated = await ctx.context.adapter.update({
         model: 'invitation',
         where: [{ field: 'token', value: invitation.token }],
         update: {
-          status: shouldMarkAccepted ? 'accepted' : 'pending',
-          usedCount: newUsedCount,
-          acceptedAt: isFirstUse ? new Date() : invitation.acceptedAt,
+          status: 'accepted',
+          acceptedAt: new Date(),
           metadata: metadata ? { ...invitation.metadata, ...metadata } : invitation.metadata,
         },
       }) as Invitation
@@ -405,17 +399,20 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         token: z.string(),
-        cancelledBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Cancel invitation',
-          description: 'Cancel a pending invitation (admin action)',
+          description: 'Cancel a pending invitation (admin action) (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      const { token, cancelledBy } = ctx.body
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const cancelledBy = session.user.id
+
+      const { token } = ctx.body
 
       // Find invitation and enrich context BEFORE calling hook
       const resource = await findInvitationContext(ctx.context.adapter, token)
@@ -427,7 +424,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       await applyEndpointAuth(config?.endpoints?.invitation?.revoke, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const invitation = resource.data as Invitation
       if (invitation.status !== 'pending') {

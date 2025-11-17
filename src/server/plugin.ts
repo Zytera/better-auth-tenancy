@@ -65,6 +65,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       // Organizations, Teams, Subteams
       organization: {
         fields: {
+          id: { type: 'string', required: true },
           name: { type: 'string', required: true },
           slug: { type: 'string', required: true, unique: true },
           metadata: { type: 'string', required: false },
@@ -74,6 +75,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       team: {
         fields: {
+          id: { type: 'string', required: true },
           organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
           name: { type: 'string', required: true },
           slug: { type: 'string', required: true },
@@ -84,6 +86,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       subteam: {
         fields: {
+          id: { type: 'string', required: true },
           teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
           name: { type: 'string', required: true },
           slug: { type: 'string', required: true },
@@ -103,6 +106,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       statementTranslation: {
         fields: {
+          id: { type: 'string', required: true },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           locale: { type: 'string', required: true },
           name: { type: 'string', required: true },
@@ -113,6 +117,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       // Roles
       organizationRole: {
         fields: {
+          id: { type: 'string', required: true },
           organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
           name: { type: 'string', required: true },
           description: { type: 'string', required: false },
@@ -122,6 +127,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       organizationRoleStatement: {
         fields: {
+          id: { type: 'string', required: true },
           roleId: { type: 'string', required: true, references: { model: 'organizationRole', field: 'id' } },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           createdAt: { type: 'date', required: true },
@@ -129,6 +135,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       teamRole: {
         fields: {
+          id: { type: 'string', required: true },
           teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
           name: { type: 'string', required: true },
           description: { type: 'string', required: false },
@@ -138,6 +145,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       teamRoleStatement: {
         fields: {
+          id: { type: 'string', required: true },
           roleId: { type: 'string', required: true, references: { model: 'teamRole', field: 'id' } },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           createdAt: { type: 'date', required: true },
@@ -146,6 +154,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       // Members
       organizationMember: {
         fields: {
+          id: { type: 'string', required: true },
           organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           roleId: { type: 'string', required: false, references: { model: 'organizationRole', field: 'id' } },
@@ -155,6 +164,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       teamMember: {
         fields: {
+          id: { type: 'string', required: true },
           teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           roleId: { type: 'string', required: false, references: { model: 'teamRole', field: 'id' } },
@@ -164,6 +174,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       subteamMember: {
         fields: {
+          id: { type: 'string', required: true },
           subteamId: { type: 'string', required: true, references: { model: 'subteam', field: 'id' } },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           roleId: { type: 'string', required: false, references: { model: 'teamRole', field: 'id' } },
@@ -174,6 +185,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       // Permissions
       permissionGrant: {
         fields: {
+          id: { type: 'string', required: true },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           contextType: { type: 'string', required: true },
@@ -185,6 +197,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       },
       permissionDeny: {
         fields: {
+          id: { type: 'string', required: true },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           contextType: { type: 'string', required: true },
@@ -196,16 +209,20 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
       // Invitations
       invitation: {
         fields: {
-          email: { type: 'string', required: true },
+          id: { type: 'string', required: true },
+          token: { type: 'string', required: true, unique: true },
+          invitationCode: { type: 'string', required: false },
+          identifier: { type: 'string', required: false },
           contextType: { type: 'string', required: true },
           contextId: { type: 'string', required: true },
           roleId: { type: 'string', required: false },
           invitedBy: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
           status: { type: 'string', required: true },
-          token: { type: 'string', required: true, unique: true },
-          expiresAt: { type: 'date', required: true },
+          expiresAt: { type: 'date', required: false },
           createdAt: { type: 'date', required: true },
           acceptedAt: { type: 'date', required: false },
+          cancelledAt: { type: 'date', required: false },
+          metadata: { type: 'string', required: false },
         },
       },
     } as any,

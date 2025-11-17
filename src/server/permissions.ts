@@ -5,7 +5,7 @@ import type { PermissionGrant, PermissionDeny } from '../schema'
 import type { ContextType } from '../types/context'
 import type { StatementId } from '../types/statement'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 
 /**
  * Find permission (grant or deny) and determine its context
@@ -53,7 +53,7 @@ export interface GrantPermissionInput {
   contextType: ContextType
   contextId: string
   expiresAt?: Date
-  grantedBy: string
+  // Note: grantedBy is automatically obtained from authenticated session
 }
 
 export interface DenyPermissionInput {
@@ -61,13 +61,13 @@ export interface DenyPermissionInput {
   statementId: StatementId
   contextType: ContextType
   contextId: string
-  deniedBy: string
+  // Note: deniedBy is automatically obtained from authenticated session
 }
 
 export interface RevokePermissionInput {
   permissionId: string
   type: 'grant' | 'deny'
-  revokedBy: string
+  // Note: revokedBy is automatically obtained from authenticated session
 }
 
 export interface CheckPermissionInput {
@@ -88,20 +88,23 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
         expiresAt: z.string().optional(),
-        grantedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Grant permission',
-          description: 'Grant explicit permission to a user',
+          description: 'Grant explicit permission to a user (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.grant, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const grantedBy = session.user.id
 
-      const { userId, statementId, contextType, contextId, expiresAt, grantedBy } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.permission?.grant, ctx, session)
+
+      const { userId, statementId, contextType, contextId, expiresAt } = ctx.body
 
       // Check if deny exists (deny always wins)
       const denies = await ctx.context.adapter.findMany({
@@ -174,20 +177,23 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         statementId: z.string(),
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
-        deniedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Deny permission',
-          description: 'Deny explicit permission to a user',
+          description: 'Deny explicit permission to a user (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.deny, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const deniedBy = session.user.id
 
-      const { userId, statementId, contextType, contextId, deniedBy } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.permission?.deny, ctx, session)
+
+      const { userId, statementId, contextType, contextId } = ctx.body
 
       // Check if deny already exists
       const existingDenies = await ctx.context.adapter.findMany({
@@ -239,17 +245,20 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         permissionId: z.string(),
         type: z.enum(['grant', 'deny']),
-        revokedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Revoke permission',
-          description: 'Revoke a grant or deny',
+          description: 'Revoke a grant or deny (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      const { permissionId, type, revokedBy } = ctx.body
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const revokedBy = session.user.id
+
+      const { permissionId, type } = ctx.body
 
       // Find permission and enrich context BEFORE calling hook
       const resource = await findPermissionContext(ctx.context.adapter, permissionId, type)
@@ -550,20 +559,23 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
           contextId: z.string(),
           expiresAt: z.string().optional(),
         })),
-        grantedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Batch grant permissions',
-          description: 'Grant multiple permissions at once',
+          description: 'Grant multiple permissions at once (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.grantBatch, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const grantedBy = session.user.id
 
-      const { grants, grantedBy } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.permission?.grantBatch, ctx, session)
+
+      const { grants } = ctx.body
       const successful: PermissionGrant[] = []
       const failed: Array<{ input: any; error: string }> = []
 
@@ -655,20 +667,23 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
           contextType: z.enum(['organization', 'team', 'subteam']),
           contextId: z.string(),
         })),
-        deniedBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Batch deny permissions',
-          description: 'Deny multiple permissions at once',
+          description: 'Deny multiple permissions at once (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.permission?.denyBatch, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const deniedBy = session.user.id
 
-      const { denies, deniedBy } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.permission?.denyBatch, ctx, session)
+
+      const { denies } = ctx.body
       const successful: PermissionDeny[] = []
       const failed: Array<{ input: any; error: string }> = []
 

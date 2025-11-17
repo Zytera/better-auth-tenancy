@@ -330,20 +330,23 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         statements: z.array(z.string()),
-        createdBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Batch create statements',
-          description: 'Create multiple statements at once',
+          description: 'Create multiple statements at once (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx)
+      // Require authentication (supports both cookies and Bearer tokens)
+      const session = await requireSession(ctx)
+      const createdBy = session.user.id
 
-      const { statements, createdBy } = ctx.body
+      // Apply authorization hook if configured (pass session to avoid re-fetch)
+      await applyEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx, session)
+
+      const { statements } = ctx.body
       const successful: Statement[] = []
       const failed: Array<{ id: StatementId; error: string }> = []
 
