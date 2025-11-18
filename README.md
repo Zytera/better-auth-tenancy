@@ -99,8 +99,7 @@ await authClient.tenancy.permission.grant({
   statementId: 'billing:manage',
   contextType: 'organization',
   contextId: orgId,
-  expiresAt: new Date('2024-12-31'), // Expires on this date
-  grantedBy: adminId
+  expiresAt: new Date('2024-12-31')
 })
 ```
 
@@ -109,17 +108,14 @@ await authClient.tenancy.permission.grant({
 Built-in invitation workflow:
 
 ```typescript
-// Create invitation
 const invitation = await authClient.tenancy.invitation.create({
-  email: 'user@example.com',
+  identifier: 'user@example.com',
   contextType: 'team',
   contextId: teamId,
   roleId: editorRoleId,
-  invitedBy: adminId,
   expiresInHours: 72
 })
 
-// Accept invitation
 await authClient.tenancy.invitation.accept({
   token: invitation.token
 })
@@ -516,23 +512,19 @@ if (result.allowed) {
 Override role-based permissions:
 
 ```typescript
-// Grant temporary permission (24 hours)
 await authClient.tenancy.permission.grant({
   userId: user.id,
   statementId: 'deploy:production',
   contextType: 'team',
   contextId: team.id,
-  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-  grantedBy: adminId,
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
 })
 
-// Deny permission (highest priority)
 await authClient.tenancy.permission.deny({
   userId: user.id,
   statementId: 'sensitive:data',
   contextType: 'organization',
-  contextId: org.id,
-  deniedBy: adminId,
+  contextId: org.id
 })
 ```
 
@@ -566,48 +558,48 @@ authClient.tenancy.subteam.update({ id, name?, slug?, metadata? })
 authClient.tenancy.subteam.delete({ id })
 authClient.tenancy.subteam.list({ teamId, limit?, offset?, orderBy?, orderDirection? })
 
-// Statements
+// Statements (createdBy is automatically set from authenticated user)
 authClient.tenancy.statement.create({ id })
 authClient.tenancy.statement.get({ id })
 authClient.tenancy.statement.update({ id, category?, operation? })
 authClient.tenancy.statement.delete({ id })
 authClient.tenancy.statement.list({ limit?, offset?, orderBy?, orderDirection? })
-authClient.tenancy.statement.batchCreate({ statements, createdBy })
+authClient.tenancy.statement.batchCreate({ statements })
 
-// Roles
+// Roles (addedBy, removedBy are automatically set from authenticated user)
 authClient.tenancy.role.create({ name, contextType, contextId, statements?, description? })
 authClient.tenancy.role.get({ id })
 authClient.tenancy.role.update({ id, name?, description? })
 authClient.tenancy.role.delete({ id })
 authClient.tenancy.role.list({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
-authClient.tenancy.role.addStatement({ id, statementId, addedBy })
-authClient.tenancy.role.removeStatement({ id, statementId, removedBy })
+authClient.tenancy.role.addStatement({ id, statementId })
+authClient.tenancy.role.removeStatement({ id, statementId })
 
-// Members
+// Members (updatedBy, removedBy are automatically set from authenticated user)
 authClient.tenancy.member.add({ userId, contextType, contextId, roleId?, metadata? })
 authClient.tenancy.member.get({ id })
-authClient.tenancy.member.updateRole({ id, roleId, updatedBy })
-authClient.tenancy.member.updateMetadata({ id, metadata, updatedBy })
-authClient.tenancy.member.remove({ id, removedBy })
+authClient.tenancy.member.updateRole({ id, roleId })
+authClient.tenancy.member.updateMetadata({ id, metadata })
+authClient.tenancy.member.remove({ id })
 authClient.tenancy.member.list({ contextType, contextId, limit?, offset?, orderBy?, orderDirection? })
 authClient.tenancy.member.getUserMemberships({ userId, contextType?, limit?, offset? })
 authClient.tenancy.member.check({ userId, contextType, contextId })
 
-// Permissions
-authClient.tenancy.permission.grant({ userId, statementId, contextType, contextId, expiresAt?, grantedBy })
-authClient.tenancy.permission.deny({ userId, statementId, contextType, contextId, deniedBy })
-authClient.tenancy.permission.revoke({ userId, statementId, contextType, contextId, revokedBy })
+// Permissions (grantedBy, deniedBy, revokedBy are automatically set from authenticated user)
+authClient.tenancy.permission.grant({ userId, statementId, contextType, contextId, expiresAt? })
+authClient.tenancy.permission.deny({ userId, statementId, contextType, contextId })
+authClient.tenancy.permission.revoke({ permissionId, type })
 authClient.tenancy.permission.check({ userId, statementId, contextType, contextId })
 authClient.tenancy.permission.listGrants({ userId, limit?, offset? })
 authClient.tenancy.permission.listDenies({ userId, limit?, offset? })
-authClient.tenancy.permission.grantBatch({ grants, grantedBy })
-authClient.tenancy.permission.denyBatch({ denies, deniedBy })
+authClient.tenancy.permission.grantBatch({ grants })
+authClient.tenancy.permission.denyBatch({ denies })
 
-// Invitations
-authClient.tenancy.invitation.create({ email, contextType, contextId, roleId?, expiresInHours?, invitedBy })
+// Invitations (invitedBy, cancelledBy are automatically set from authenticated user)
+authClient.tenancy.invitation.create({ identifier?, contextType, contextId, roleId?, expiresInHours?, generateCode?, metadata? })
 authClient.tenancy.invitation.accept({ token })
 authClient.tenancy.invitation.reject({ token, userId })
-authClient.tenancy.invitation.cancel({ id, canceledBy })
+authClient.tenancy.invitation.cancel({ token })
 authClient.tenancy.invitation.getByToken({ token })
 authClient.tenancy.invitation.getByCode({ code })
 authClient.tenancy.invitation.list({ contextType, contextId, limit?, offset?, status?, orderBy?, orderDirection? })
@@ -797,14 +789,12 @@ await authClient.tenancy.member.add({
 ### Example 2: Invitation Workflow
 
 ```typescript
-// Create invitation for new team member
 const invitation = await authClient.tenancy.invitation.create({
-  email: 'newdev@example.com',
+  identifier: 'newdev@example.com',
   contextType: 'team',
   contextId: engineeringTeamId,
   roleId: developerRoleId,
-  expiresInHours: 72,
-  invitedBy: adminId,
+  expiresInHours: 72
 })
 
 // Send email with invitation link
@@ -908,9 +898,6 @@ bun run test       # Run tests
 - 🐛 Issues: [GitHub Issues](https://github.com/zytera/better-auth-tenancy/issues)
 - 📖 Documentation: [Full Docs](https://github.com/zytera/better-auth-tenancy/docs)
 
-## 📄 License
-
-MIT License - see LICENSE file for details
 
 ## 🙏 Acknowledgments
 

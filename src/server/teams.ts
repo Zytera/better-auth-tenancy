@@ -10,14 +10,12 @@ export interface CreateTeamInput {
   name: string
   slug: string
   metadata?: Record<string, unknown>
-  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateTeamInput {
   name?: string
   slug?: string
   metadata?: Record<string, unknown>
-  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const teamEndpoints = (config?: TenancyConfig) => ({
@@ -39,16 +37,13 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.create, ctx, session)
 
       const { organizationId, name, slug, metadata } = ctx.body
 
-      // Check limits if configured
       if (config?.limits?.maxTeamsPerOrganization) {
         const allTeams = await ctx.context.adapter.findMany({
           model: 'team',
@@ -61,7 +56,6 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         }
       }
 
-      // Validate slug is unique within organization
       const teamsByOrg = await ctx.context.adapter.findMany({
         model: 'team',
         where: [{ field: 'organizationId', value: organizationId }],
@@ -109,10 +103,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.read, ctx, session)
 
       const { id } = ctx.params
@@ -143,10 +134,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.read, ctx, session)
 
       const { organizationId, slug } = ctx.params
@@ -179,11 +167,9 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.update, ctx, session)
 
       const { id, name, slug, metadata } = ctx.body
@@ -247,11 +233,9 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.delete, ctx, session)
 
       const { id } = ctx.body
@@ -308,29 +292,23 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.team?.list, ctx, session)
 
       const { organizationId, limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
-      // Get all teams first
       let items = await ctx.context.adapter.findMany({
         model: 'team',
         where: [{ field: 'organizationId', value: organizationId }],
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Team[]
 
-      // Apply permission filtering if configured
       if (config?.permissionFiltering?.filterTeams) {
         items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
       }
 
       const total = items.length
 
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })

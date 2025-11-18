@@ -9,7 +9,6 @@ export interface CreateOrganizationInput {
   name: string
   slug: string
   metadata?: Record<string, unknown>
-  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateOrganizationInput {
@@ -17,7 +16,6 @@ export interface UpdateOrganizationInput {
   name?: string
   slug?: string
   metadata?: Record<string, unknown>
-  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const organizationEndpoints = (config?: TenancyConfig) => ({
@@ -38,11 +36,9 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.organization?.create, ctx, session)
 
       const { name, slug, metadata } = ctx.body
@@ -88,10 +84,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
       const { id } = ctx.params
@@ -121,10 +114,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.organization?.read, ctx, session)
 
       const { slug } = ctx.params
@@ -157,11 +147,9 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.organization?.update, ctx, session)
 
       const { id, name, slug, metadata } = ctx.body
@@ -220,11 +208,9 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.organization?.delete, ctx, session)
 
       const { id } = ctx.body
@@ -280,28 +266,22 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.organization?.list, ctx, session)
 
       const { limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
-      // Get all organizations first
       let items = await ctx.context.adapter.findMany({
         model: 'organization',
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Organization[]
 
-      // Apply permission filtering if configured
       if (config?.permissionFiltering?.filterOrganizations) {
         items = await config.permissionFiltering.filterOrganizations(ctx, items)
       }
 
       const total = items.length
 
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })

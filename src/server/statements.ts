@@ -9,7 +9,6 @@ import { applyEndpointAuth, requireSession } from './middleware'
 
 export interface CreateStatementInput {
   id: StatementId
-  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export const statementEndpoints = (config?: TenancyConfig) => ({
@@ -28,11 +27,9 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.create, ctx, session)
 
       const { id } = ctx.body
@@ -88,10 +85,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.read, ctx, session)
 
       const { id } = ctx.params
@@ -103,28 +97,23 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
 
       if (!statement) throw new APIError('NOT_FOUND', { message: 'Statement not found' })
 
-      // Get all translations for this statement
       const translations = await ctx.context.adapter.findMany({
         model: 'statementTranslation',
         where: [{ field: 'statementId', value: statement.id }],
       }) as StatementTranslation[]
 
-      // If no translations, return statement as-is
       if (translations.length === 0) {
         return ctx.json(statement)
       }
 
-      // Get Accept-Language from headers
       const acceptLanguage = getLocaleFromHeaders(ctx.headers)
       const availableLocales = translations.map((t) => t.locale)
       const bestLocale = getBestLocale(acceptLanguage, availableLocales, config)
 
-      // Find the best translation
       const translation = bestLocale
         ? translations.find((t) => t.locale === bestLocale)
         : translations[0]
 
-      // Return statement with selected translation
       return ctx.json({
         ...statement,
         translation: translation
@@ -155,11 +144,9 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.update, ctx, session)
 
       const { id, category, operation } = ctx.body
@@ -213,11 +200,9 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.delete, ctx, session)
 
       const { id } = ctx.body
@@ -262,30 +247,23 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.statement?.list, ctx, session)
 
       const { limit = 50, offset = 0 } = ctx.query
 
-      // Get all items first
       let items = await ctx.context.adapter.findMany({
         model: 'statement',
       }) as Statement[]
 
       const total = items.length
 
-      // Get Accept-Language from headers
       const acceptLanguage = getLocaleFromHeaders(ctx.headers)
 
-      // Get all translations for all statements
       const allTranslations = await ctx.context.adapter.findMany({
         model: 'statementTranslation',
       }) as StatementTranslation[]
 
-      // Map translations by statement ID
       const translationsByStatement = new Map<string, StatementTranslation[]>()
       for (const translation of allTranslations) {
         const existing = translationsByStatement.get(translation.statementId) || []
@@ -293,10 +271,8 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         translationsByStatement.set(translation.statementId, existing)
       }
 
-      // Apply pagination
       items = items.slice(offset, offset + limit)
 
-      // Add best translation to each statement
       const itemsWithTranslations = items.map((statement) => {
         const translations = translationsByStatement.get(statement.id) || []
         if (translations.length === 0) return statement
@@ -330,20 +306,21 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         statements: z.array(z.string()),
-        createdBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Batch create statements',
-          description: 'Create multiple statements at once',
+          description: 'Create multiple statements at once (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx)
+      const session = await requireSession(ctx)
+      const createdBy = session.user.id
 
-      const { statements, createdBy } = ctx.body
+      await applyEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx, session)
+
+      const { statements } = ctx.body
       const successful: Statement[] = []
       const failed: Array<{ id: StatementId; error: string }> = []
 

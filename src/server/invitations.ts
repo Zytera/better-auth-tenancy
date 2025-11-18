@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 import { _addMember } from './members'
 import {
   generateInvitationToken,
@@ -14,10 +14,6 @@ import {
   calculateExpirationDate,
 } from '../utils/invitation-helper'
 
-/**
- * Find invitation and determine its context
- * This helper is used to enrich endpoint hooks with resource context
- */
 export async function findInvitationContext(
   adapter: Adapter,
   token: string
@@ -43,47 +39,40 @@ export interface CreateInvitationInput {
   contextType: ContextType
   contextId: string
   roleId?: string
-  invitedBy: string
   expiresInHours?: number
   generateCode?: boolean
-  maxUses?: number
   metadata?: Record<string, unknown>
 }
 
 export const invitationEndpoints = (config?: TenancyConfig) => ({
-  /**
-   * Create a new invitation
-   * Flexible: can be used for email, phone, username, or anonymous invitations
-   */
   createInvitation: createAuthEndpoint(
     '/tenancy/invitation/create',
     {
       method: 'POST',
       body: z.object({
-        identifier: z.string().optional(), // Flexible: email, phone, username, etc.
+        identifier: z.string().optional(),
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
         roleId: z.string().optional(),
-        invitedBy: z.string(),
-        expiresInHours: z.number().optional(), // undefined = never expires
-        generateCode: z.boolean().optional(), // Generate short code
-        maxUses: z.number().int().positive().optional(), // For multi-use invitations
+        expiresInHours: z.number().optional(),
+        generateCode: z.boolean().optional(),
         metadata: z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
           summary: 'Create invitation',
-          description: 'Create a flexible invitation (email/phone/link/QR)',
+          description: 'Create a flexible invitation (email/phone/link/QR) (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
-      await applyEndpointAuth(config?.endpoints?.invitation?.create, ctx)
+      const session = await requireSession(ctx)
+      const invitedBy = session.user.id
 
-      const { identifier, contextType, contextId, roleId, invitedBy, expiresInHours, generateCode, maxUses, metadata } = ctx.body
+      await applyEndpointAuth(config?.endpoints?.invitation?.create, ctx, session)
 
-      // Check for existing pending invitation (only if identifier provided)
+      const { identifier, contextType, contextId, roleId, expiresInHours, generateCode, metadata } = ctx.body
+
       if (identifier) {
         const allInvitations = await ctx.context.adapter.findMany({
           model: 'invitation',
@@ -100,11 +89,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         }
       }
 
-      // Generate tokens
       const token = generateInvitationToken()
       const invitationCode = generateCode ? generateInvitationCode() : null
 
-      // Calculate expiration (undefined = never expires)
       const expiresAt = calculateExpirationDate(
         expiresInHours === undefined ? undefined : (expiresInHours || config?.invitation?.defaultExpirationHours || 72)
       )
@@ -120,8 +107,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           roleId: roleId || null,
           invitedBy,
           status: 'pending',
-          maxUses: maxUses || null,
-          usedCount: 0,
           expiresAt,
           metadata,
         },
@@ -136,7 +121,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           roleId: invitation.roleId ?? null,
           invitedBy: invitation.invitedBy,
           token: invitation.token,
-          expiresAt: invitation.expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year fallback for audit
+          expiresAt: invitation.expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year by default
           timestamp: new Date(),
         })
       }
@@ -145,9 +130,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
-  /**
-   * Get invitation by token
-   */
   getInvitationByToken: createAuthEndpoint(
     '/tenancy/invitation/by-token/:token',
     {
@@ -163,10 +145,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx, session)
 
       const { token: tokenParam } = ctx.params
@@ -178,15 +157,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
 
-      // Return without sensitive token in response
       const { token, ...safeInvitation } = invitation
       return ctx.json(safeInvitation)
     }
   ),
 
-  /**
-   * Get invitation by short code
-   */
   getInvitationByCode: createAuthEndpoint(
     '/tenancy/invitation/by-code/:code',
     {
@@ -202,10 +177,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.getByToken, ctx, session)
 
       const code = ctx.params.code.toUpperCase()
@@ -221,15 +193,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
 
-      // Return without sensitive token
       const { token, ...safeInvitation } = invitation
       return ctx.json(safeInvitation)
     }
   ),
 
-  /**
-   * Accept invitation - flexible acceptance (by token or code)
-   */
   acceptInvitation: createAuthEndpoint(
     '/tenancy/invitation/accept',
     {
@@ -248,7 +216,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.accept, ctx)
 
       const { token, invitationCode, userId, metadata } = ctx.body
@@ -257,7 +224,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         throw new APIError('BAD_REQUEST', { message: 'Either token or invitationCode must be provided' })
       }
 
-      // Find invitation
       let invitation: Invitation | null = null
       if (token) {
         invitation = await ctx.context.adapter.findOne({
@@ -277,13 +243,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invalid invitation' })
 
-      // Check if invitation can be used
       const canUse = canUseInvitation(invitation)
       if (!canUse.canUse) {
         throw new APIError('BAD_REQUEST', { message: canUse.reason || 'Cannot use invitation' })
       }
 
-      // Add user as member
       const member = await _addMember(
         ctx.context.adapter,
         {
@@ -296,18 +260,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         config
       )
 
-      // Update invitation
-      const isFirstUse = invitation.usedCount === 0
-      const newUsedCount = invitation.usedCount + 1
-      const shouldMarkAccepted = invitation.maxUses == null || newUsedCount >= invitation.maxUses
-
       const updated = await ctx.context.adapter.update({
         model: 'invitation',
         where: [{ field: 'token', value: invitation.token }],
         update: {
-          status: shouldMarkAccepted ? 'accepted' : 'pending',
-          usedCount: newUsedCount,
-          acceptedAt: isFirstUse ? new Date() : invitation.acceptedAt,
+          status: 'accepted',
+          acceptedAt: new Date(),
           metadata: metadata ? { ...invitation.metadata, ...metadata } : invitation.metadata,
         },
       }) as Invitation
@@ -328,9 +286,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
-  /**
-   * Reject/decline invitation
-   */
   rejectInvitation: createAuthEndpoint(
     '/tenancy/invitation/reject',
     {
@@ -348,7 +303,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.decline, ctx)
 
       const { token, invitationCode } = ctx.body
@@ -357,7 +311,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         throw new APIError('BAD_REQUEST', { message: 'Either token or invitationCode must be provided' })
       }
 
-      // Find invitation
       let invitation: Invitation | null = null
       if (token) {
         invitation = await ctx.context.adapter.findOne({
@@ -396,38 +349,35 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
-  /**
-   * Cancel invitation (by admin/inviter)
-   */
   cancelInvitation: createAuthEndpoint(
     '/tenancy/invitation/cancel',
     {
       method: 'POST',
       body: z.object({
         token: z.string(),
-        cancelledBy: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Cancel invitation',
-          description: 'Cancel a pending invitation (admin action)',
+          description: 'Cancel a pending invitation (admin action) (requires authentication)',
         },
       },
     },
     async (ctx) => {
-      const { token, cancelledBy } = ctx.body
+      const session = await requireSession(ctx)
+      const cancelledBy = session.user.id
 
-      // Find invitation and enrich context BEFORE calling hook
+      const { token } = ctx.body
+
       const resource = await findInvitationContext(ctx.context.adapter, token)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.invitation?.revoke, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const invitation = resource.data as Invitation
       if (invitation.status !== 'pending') {
@@ -458,9 +408,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
-  /**
-   * List invitations for a context
-   */
   listInvitations: createAuthEndpoint(
     '/tenancy/invitation/list',
     {
@@ -480,10 +427,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
       const { contextType, contextId, status, limit = 50, offset = 0 } = ctx.query
@@ -496,27 +440,20 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where.push({ field: 'status', value: status })
       }
 
-      // Get all items first
       let items = await ctx.context.adapter.findMany({
         model: 'invitation',
         where,
       }) as Invitation[]
 
       const total = items.length
-
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
-      // Remove sensitive tokens from list
       const safeItems = items.map(({ token, ...item }) => item)
 
       return ctx.json({ items: safeItems, total, limit, offset })
     }
   ),
 
-  /**
-   * Get invitations by identifier (email/phone/username)
-   */
   getInvitationsByIdentifier: createAuthEndpoint(
     '/tenancy/invitation/by-identifier',
     {
@@ -533,10 +470,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
 
       const { identifier, status } = ctx.query
@@ -551,16 +485,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where,
       }) as Invitation[]
 
-      // Remove sensitive tokens
       const safeInvitations = invitations.map(({ token, ...inv }) => inv)
 
       return ctx.json(safeInvitations)
     }
   ),
 
-  /**
-   * Cleanup expired invitations (cron job)
-   */
   cleanupExpiredInvitations: createAuthEndpoint(
     '/tenancy/invitation/cleanup-expired',
     {
@@ -573,7 +503,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.invitation?.cleanupExpired, ctx)
 
       const allInvitations = await ctx.context.adapter.findMany({
@@ -584,7 +513,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         inv.status === 'pending' && inv.expiresAt != null && inv.expiresAt < now
       )
 
-      // Update them to expired status
       for (const inv of expired) {
         await ctx.context.adapter.update({
           model: 'invitation',

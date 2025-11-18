@@ -76,7 +76,6 @@ export interface UpdateMemberRoleInput {
   contextType: ContextType
   contextId: string
   roleId: string | null
-  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const memberEndpoints = (config?: TenancyConfig) => ({
@@ -99,11 +98,9 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const addedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.add, ctx, session)
 
       const { userId, contextType, contextId, roleId, metadata } = ctx.body
@@ -190,15 +187,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { id } = ctx.params
 
-      // Try each type until we find it
       const orgMember = await ctx.context.adapter.findOne({
         model: 'organizationMember',
         where: [{ field: 'id', value: id }],
@@ -237,19 +230,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
       const { id, roleId } = ctx.body
 
-      // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Member not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.member?.updateRole, {
         ...ctx,
         resource,
@@ -314,10 +304,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       await requireSession(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
 
       const { id, metadata } = ctx.body
@@ -381,19 +368,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const removedBy = session.user.id
 
       const { id } = ctx.body
 
-      // Find member and enrich context BEFORE calling hook
       const resource = await findMemberContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Member not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.member?.remove, {
         ...ctx,
         resource,
@@ -402,7 +386,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const existing = resource.data as Member
       const memberType = resource.contextType
 
-      // Delete member based on context type
       const modelName =
         memberType === 'organization'
           ? 'organizationMember'
@@ -415,7 +398,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'id', value: id }],
       })
 
-      // Trigger audit hook if configured
       if (config?.audit?.onMemberRemoved) {
         await config.audit.onMemberRemoved({
           userId: existing.userId,
@@ -448,15 +430,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { contextType, contextId, limit = 50, offset = 0 } = ctx.query
 
-      // Get all items first
       let items: Member[] = []
       switch (contextType) {
         case 'organization':
@@ -479,7 +457,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           break
       }
 
-      // Apply permission filtering if configured
       if (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) {
         items = await config.permissionFiltering.filterOrganizationMembers(
           ctx,
@@ -487,7 +464,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           { organizationId: contextId }
         )
       } else if (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) {
-        // Get organizationId from team to build complete context
         const team = await ctx.context.adapter.findOne({
           model: 'team',
           where: [{ field: 'id', value: contextId }],
@@ -500,7 +476,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           )
         }
       } else if (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers) {
-        // Get teamId and organizationId from subteam to build complete context
         const subteam = await ctx.context.adapter.findOne({
           model: 'subteam',
           where: [{ field: 'id', value: contextId }],
@@ -522,7 +497,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const total = items.length
 
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })
@@ -545,10 +519,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { userId, contextType } = ctx.query
@@ -610,10 +581,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
 
       const { userId, contextType, contextId } = ctx.body
