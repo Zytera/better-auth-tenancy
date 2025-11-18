@@ -842,7 +842,6 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
             }
         }),
 
-        // Apply locale header if configured
         ...(config?.locale && {
             fetchOptions: {
                 headers: {
@@ -853,5 +852,4 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
     }
 }
 
-// Export types for convenience
 export type * from '../types'

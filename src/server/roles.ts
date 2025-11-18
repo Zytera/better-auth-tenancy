@@ -51,13 +51,11 @@ export interface CreateRoleInput {
   name: string
   description?: string
   statements?: StatementId[]
-  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateRoleInput {
   name?: string
   description?: string
-  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const roleEndpoints = (config?: TenancyConfig) => ({
@@ -80,16 +78,13 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.role?.create, ctx, session)
 
       const { contextType, contextId, name, description, statements } = ctx.body
 
-      // Check limits
       const maxRoles = contextType === 'organization'
         ? config?.limits?.maxRolesPerOrganization
         : config?.limits?.maxRolesPerTeam
@@ -203,18 +198,15 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
 
       const { id } = ctx.params
 
-      // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.role?.read, {
         ...ctx,
         resource,
@@ -241,19 +233,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
       const { id, name, description } = ctx.body
 
-      // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.role?.update, {
         ...ctx,
         resource,
@@ -306,19 +295,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
       const { id } = ctx.body
 
-      // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.role?.delete, {
         ...ctx,
         resource,
@@ -364,10 +350,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.role?.list, ctx, session)
 
       const { contextType, contextId, limit = 50, offset = 0 } = ctx.query
@@ -375,7 +358,6 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
       const field = contextType === 'organization' ? 'organizationId' : 'teamId'
 
-      // Get all items first
       let items = await ctx.context.adapter.findMany({
         model,
         where: [{ field, value: contextId }],
@@ -383,7 +365,6 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const total = items.length
 
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })
@@ -406,19 +387,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const addedBy = session.user.id
 
       const { id, statementId } = ctx.body
 
-      // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.role?.addStatement, {
         ...ctx,
         resource,
@@ -467,19 +445,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const removedBy = session.user.id
 
       const { id, statementId } = ctx.body
 
-      // Find role and enrich context BEFORE calling hook
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Role not found' })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.role?.removeStatement, {
         ...ctx,
         resource,

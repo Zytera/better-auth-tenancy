@@ -53,7 +53,6 @@ export interface GrantPermissionInput {
   contextType: ContextType
   contextId: string
   expiresAt?: Date
-  // Note: grantedBy is automatically obtained from authenticated session
 }
 
 export interface DenyPermissionInput {
@@ -61,13 +60,11 @@ export interface DenyPermissionInput {
   statementId: StatementId
   contextType: ContextType
   contextId: string
-  // Note: deniedBy is automatically obtained from authenticated session
 }
 
 export interface RevokePermissionInput {
   permissionId: string
   type: 'grant' | 'deny'
-  // Note: revokedBy is automatically obtained from authenticated session
 }
 
 export interface CheckPermissionInput {
@@ -97,16 +94,13 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const grantedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.permission?.grant, ctx, session)
 
       const { userId, statementId, contextType, contextId, expiresAt } = ctx.body
 
-      // Check if deny exists (deny always wins)
       const denies = await ctx.context.adapter.findMany({
         model: 'permissionDeny',
         where: [
@@ -123,7 +117,6 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      // Check if grant already exists
       const existingGrants = await ctx.context.adapter.findMany({
         model: 'permissionGrant',
         where: [
@@ -186,16 +179,13 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const deniedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.permission?.deny, ctx, session)
 
       const { userId, statementId, contextType, contextId } = ctx.body
 
-      // Check if deny already exists
       const existingDenies = await ctx.context.adapter.findMany({
         model: 'permissionDeny',
         where: [
@@ -254,19 +244,16 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const revokedBy = session.user.id
 
       const { permissionId, type } = ctx.body
 
-      // Find permission and enrich context BEFORE calling hook
       const resource = await findPermissionContext(ctx.context.adapter, permissionId, type)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: `${type === 'grant' ? 'Grant' : 'Deny'} with id "${permissionId}" not found` })
       }
 
-      // Apply authorization hook with enriched context
       await applyEndpointAuth(config?.endpoints?.permission?.revoke, {
         ...ctx,
         resource,
@@ -315,7 +302,6 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.permission?.check, ctx)
 
       const { userId, statementId, contextType, contextId } = ctx.body
@@ -480,10 +466,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.permission?.listGrants, ctx, session)
 
       const { userId, contextType, contextId } = ctx.query
@@ -522,10 +505,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.permission?.listDenies, ctx, session)
 
       const { userId, contextType, contextId } = ctx.query
@@ -568,11 +548,9 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const grantedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.permission?.grantBatch, ctx, session)
 
       const { grants } = ctx.body
@@ -581,7 +559,6 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
 
       for (const grantInput of grants) {
         try {
-          // Check if deny exists
           const denies = await ctx.context.adapter.findMany({
             model: 'permissionDeny',
             where: [
@@ -600,7 +577,6 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
             continue
           }
 
-          // Check if grant already exists
           const existingGrants = await ctx.context.adapter.findMany({
             model: 'permissionGrant',
             where: [
@@ -676,11 +652,9 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication (supports both cookies and Bearer tokens)
       const session = await requireSession(ctx)
       const deniedBy = session.user.id
 
-      // Apply authorization hook if configured (pass session to avoid re-fetch)
       await applyEndpointAuth(config?.endpoints?.permission?.denyBatch, ctx, session)
 
       const { denies } = ctx.body
@@ -689,7 +663,6 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
 
       for (const denyInput of denies) {
         try {
-          // Check if deny already exists
           const existingDenies = await ctx.context.adapter.findMany({
             model: 'permissionDeny',
             where: [

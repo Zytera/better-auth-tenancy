@@ -94,13 +94,12 @@ await authClient.tenancy.role.create({
 Grant time-limited access:
 
 ```typescript
-// The current authenticated user is automatically set as grantedBy
 await authClient.tenancy.permission.grant({
   userId,
   statementId: 'billing:manage',
   contextType: 'organization',
   contextId: orgId,
-  expiresAt: new Date('2024-12-31') // Expires on this date
+  expiresAt: new Date('2024-12-31')
 })
 ```
 
@@ -109,16 +108,14 @@ await authClient.tenancy.permission.grant({
 Built-in invitation workflow:
 
 ```typescript
-// Create invitation (current authenticated user is automatically set as invitedBy)
 const invitation = await authClient.tenancy.invitation.create({
-  identifier: 'user@example.com', // Can be email, phone, username, or omitted for anonymous invitations
+  identifier: 'user@example.com',
   contextType: 'team',
   contextId: teamId,
   roleId: editorRoleId,
   expiresInHours: 72
 })
 
-// Accept invitation
 await authClient.tenancy.invitation.accept({
   token: invitation.token
 })
@@ -515,7 +512,6 @@ if (result.allowed) {
 Override role-based permissions:
 
 ```typescript
-// Grant temporary permission (24 hours) - current user is automatically set as grantedBy
 await authClient.tenancy.permission.grant({
   userId: user.id,
   statementId: 'deploy:production',
@@ -524,7 +520,6 @@ await authClient.tenancy.permission.grant({
   expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
 })
 
-// Deny permission (highest priority) - current user is automatically set as deniedBy
 await authClient.tenancy.permission.deny({
   userId: user.id,
   statementId: 'sensitive:data',
@@ -794,7 +789,6 @@ await authClient.tenancy.member.add({
 ### Example 2: Invitation Workflow
 
 ```typescript
-// Create invitation for new team member (current user is automatically set as invitedBy)
 const invitation = await authClient.tenancy.invitation.create({
   identifier: 'newdev@example.com',
   contextType: 'team',
@@ -904,9 +898,6 @@ bun run test       # Run tests
 - 🐛 Issues: [GitHub Issues](https://github.com/zytera/better-auth-tenancy/issues)
 - 📖 Documentation: [Full Docs](https://github.com/zytera/better-auth-tenancy/docs)
 
-## 📄 License
-
-MIT License - see LICENSE file for details
 
 ## 🙏 Acknowledgments
 

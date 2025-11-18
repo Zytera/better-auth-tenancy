@@ -10,14 +10,12 @@ export interface CreateSubteamInput {
   name: string
   slug: string
   metadata?: Record<string, unknown>
-  // Note: createdBy is automatically obtained from authenticated session
 }
 
 export interface UpdateSubteamInput {
   name?: string
   slug?: string
   metadata?: Record<string, unknown>
-  // Note: updatedBy is automatically obtained from authenticated session
 }
 
 export const subteamEndpoints = (config?: TenancyConfig) => ({
@@ -39,11 +37,9 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.create, ctx, session)
 
       const { teamId, name, slug, metadata } = ctx.body
@@ -103,10 +99,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.read, ctx, session)
 
       const { id } = ctx.params
@@ -139,11 +132,9 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.update, ctx, session)
 
       const { id, name, slug, metadata } = ctx.body
@@ -205,11 +196,9 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Require authentication
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.delete, ctx, session)
 
       const { id } = ctx.body
@@ -264,23 +253,17 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      // Get session (may be null)
       const session = await getSessionFromCtx(ctx)
-
-      // Apply authorization hook if configured
       await applyEndpointAuth(config?.endpoints?.subteam?.list, ctx, session)
 
       const { teamId, limit = 50, offset = 0 } = ctx.query
 
-      // Get all items first
       let items = await ctx.context.adapter.findMany({
         model: 'subteam',
         where: [{ field: 'teamId', value: teamId }],
       }) as Subteam[]
 
-      // Apply permission filtering if configured
       if (config?.permissionFiltering?.filterSubteams) {
-        // Get organizationId from team to build complete context
         const team = await ctx.context.adapter.findOne({
           model: 'team',
           where: [{ field: 'id', value: teamId }],
@@ -295,7 +278,6 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
 
       const total = items.length
 
-      // Apply pagination after filtering
       items = items.slice(offset, offset + limit)
 
       return ctx.json({ items, total, limit, offset })
