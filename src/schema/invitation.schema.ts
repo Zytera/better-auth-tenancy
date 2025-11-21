@@ -31,7 +31,12 @@ export type InvitationContextType = z.infer<typeof invitationContextTypeSchema>
  */
 export const invitationSchema = z.object({
   /**
-   * Unique token - primary identifier for the invitation
+   * Primary key identifier
+   */
+  id: z.string(),
+
+  /**
+   * Unique token for the invitation
    * Use this to generate shareable links: https://app.com/join/{token}
    */
   token: z.string(),
