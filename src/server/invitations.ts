@@ -5,7 +5,6 @@ import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth, requireSession } from './middleware'
-import { _addMember } from './members'
 import {
   generateInvitationToken,
   generateInvitationCode,
@@ -115,7 +114,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       if (config?.audit?.onInvitationCreated) {
         await config.audit.onInvitationCreated({
           invitationId: invitation.token,
-          email: invitation.identifier || '',
+          identifier: invitation.identifier || '',
           contextType: invitation.contextType,
           contextId: invitation.contextId,
           roleId: invitation.roleId ?? null,
@@ -205,7 +204,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         token: z.string().optional(),
         invitationCode: z.string().optional(),
-        userId: z.string(),
         metadata: z.record(z.unknown()).optional(),
       }),
       metadata: {
@@ -218,7 +216,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     async (ctx) => {
       await applyEndpointAuth(config?.endpoints?.invitation?.accept, ctx)
 
-      const { token, invitationCode, userId, metadata } = ctx.body
+      const { token, invitationCode, metadata } = ctx.body
 
       if (!token && !invitationCode) {
         throw new APIError('BAD_REQUEST', { message: 'Either token or invitationCode must be provided' })
@@ -248,18 +246,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         throw new APIError('BAD_REQUEST', { message: canUse.reason || 'Cannot use invitation' })
       }
 
-      const member = await _addMember(
-        ctx.context.adapter,
-        {
-          userId,
-          contextType: invitation.contextType,
-          contextId: invitation.contextId,
-          roleId: invitation.roleId || undefined,
-          _addedBy: invitation.invitedBy,
-        },
-        config
-      )
-
       const updated = await ctx.context.adapter.update({
         model: 'invitation',
         where: [{ field: 'token', value: invitation.token }],
@@ -273,8 +259,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       if (config?.audit?.onInvitationAccepted) {
         await config.audit.onInvitationAccepted({
           invitationId: invitation.token,
-          email: invitation.identifier || '',
-          userId,
+          identifier: invitation.identifier || '',
           contextType: invitation.contextType,
           contextId: invitation.contextId,
           roleId: invitation.roleId ?? null,
@@ -282,7 +267,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      return ctx.json({ invitation: updated, memberId: member.id })
+      return ctx.json({ invitation: updated })
     }
   ),
 
@@ -293,7 +278,6 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         token: z.string().optional(),
         invitationCode: z.string().optional(),
-        userId: z.string(),
       }),
       metadata: {
         openapi: {
@@ -338,7 +322,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       if (config?.audit?.onInvitationRejected) {
         await config.audit.onInvitationRejected({
           invitationId: invitation.token,
-          email: invitation.identifier || '',
+          identifier: invitation.identifier || '',
           contextType: invitation.contextType,
           contextId: invitation.contextId,
           timestamp: new Date(),
@@ -396,7 +380,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       if (config?.audit?.onInvitationCancelled) {
         await config.audit.onInvitationCancelled({
           invitationId: invitation.token,
-          email: invitation.identifier || '',
+          identifier: invitation.identifier || '',
           contextType: resource.contextType,
           contextId: resource.contextId,
           cancelledBy,

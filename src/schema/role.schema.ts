@@ -19,6 +19,7 @@ export const organizationRoleSchema = z.object({
  * Links roles to their permissions (statements)
  */
 export const organizationRoleStatementSchema = z.object({
+  id: z.string().default(generateId),
   roleId: z.string(),
   statementId: z.string(),
   createdAt: z.date().default(() => new Date()),
@@ -43,6 +44,7 @@ export const teamRoleSchema = z.object({
  * Links team roles to their permissions (statements)
  */
 export const teamRoleStatementSchema = z.object({
+  id: z.string().default(generateId),
   roleId: z.string(),
   statementId: z.string(),
   createdAt: z.date().default(() => new Date()),

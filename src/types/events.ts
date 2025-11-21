@@ -139,7 +139,7 @@ export interface MemberRemovedEvent extends BaseEvent {
  */
 export interface InvitationCreatedEvent extends BaseEvent {
   invitationId: string
-  email: string
+  identifier: string
   contextType: ContextType
   contextId: string
   roleId: string | null
@@ -151,11 +151,11 @@ export interface InvitationCreatedEvent extends BaseEvent {
 /**
  * Invitation Accepted Event
  * Fired when a user accepts an invitation
+ * Note: User creation and member addition should be handled in this hook
  */
 export interface InvitationAcceptedEvent extends BaseEvent {
   invitationId: string
-  email: string
-  userId: string
+  identifier: string
   contextType: ContextType
   contextId: string
   roleId: string | null
@@ -167,7 +167,7 @@ export interface InvitationAcceptedEvent extends BaseEvent {
  */
 export interface InvitationRejectedEvent extends BaseEvent {
   invitationId: string
-  email: string
+  identifier: string
   contextType: ContextType
   contextId: string
 }
@@ -178,7 +178,7 @@ export interface InvitationRejectedEvent extends BaseEvent {
  */
 export interface InvitationCancelledEvent extends BaseEvent {
   invitationId: string
-  email: string
+  identifier: string
   contextType: ContextType
   contextId: string
   cancelledBy: string
