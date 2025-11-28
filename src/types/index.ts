@@ -58,6 +58,7 @@ export type {
   RoleStatementRemovedEvent,
   AuditHooks,
   AuditEvent,
+  ActionHooks,
 } from './events'
 
 // Hooks

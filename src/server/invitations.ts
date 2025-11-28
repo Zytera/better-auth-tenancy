@@ -111,18 +111,35 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         },
       }) as Invitation
 
+      const eventData = {
+        invitationId: invitation.token,
+        identifier: invitation.identifier || '',
+        contextType: invitation.contextType,
+        contextId: invitation.contextId,
+        roleId: invitation.roleId ?? null,
+        invitedBy: invitation.invitedBy,
+        token: invitation.token,
+        expiresAt: invitation.expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        timestamp: new Date(),
+      }
+
+      // Execute action hook AFTER creating in DB (with rollback on error)
+      if (config?.actions?.onInvitationCreated) {
+        try {
+          await config.actions.onInvitationCreated(eventData, ctx)
+        } catch (error) {
+          // Rollback: Delete the invitation that was just created
+          await ctx.context.adapter.delete({
+            model: 'invitation',
+            where: [{ field: 'token', value: invitation.token }],
+          })
+          throw error
+        }
+      }
+
+      // Audit hook runs AFTER successful creation (for logging only)
       if (config?.audit?.onInvitationCreated) {
-        await config.audit.onInvitationCreated({
-          invitationId: invitation.token,
-          identifier: invitation.identifier || '',
-          contextType: invitation.contextType,
-          contextId: invitation.contextId,
-          roleId: invitation.roleId ?? null,
-          invitedBy: invitation.invitedBy,
-          token: invitation.token,
-          expiresAt: invitation.expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year by default
-          timestamp: new Date(),
-        })
+        await config.audit.onInvitationCreated(eventData)
       }
 
       return ctx.json(invitation, { status: 201 })
@@ -256,15 +273,36 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         },
       }) as Invitation
 
+      const eventData = {
+        invitationId: invitation.token,
+        identifier: invitation.identifier || '',
+        contextType: invitation.contextType,
+        contextId: invitation.contextId,
+        roleId: invitation.roleId ?? null,
+        timestamp: new Date(),
+      }
+
+      // Execute action hook AFTER updating status (with rollback on error)
+      if (config?.actions?.onInvitationAccepted) {
+        try {
+          await config.actions.onInvitationAccepted(eventData, ctx)
+        } catch (error) {
+          // Rollback: Revert invitation status back to pending
+          await ctx.context.adapter.update({
+            model: 'invitation',
+            where: [{ field: 'token', value: invitation.token }],
+            update: {
+              status: 'pending',
+              acceptedAt: null,
+            },
+          })
+          throw error
+        }
+      }
+
+      // Audit hook runs AFTER successful acceptance (for logging only)
       if (config?.audit?.onInvitationAccepted) {
-        await config.audit.onInvitationAccepted({
-          invitationId: invitation.token,
-          identifier: invitation.identifier || '',
-          contextType: invitation.contextType,
-          contextId: invitation.contextId,
-          roleId: invitation.roleId ?? null,
-          timestamp: new Date(),
-        })
+        await config.audit.onInvitationAccepted(eventData)
       }
 
       return ctx.json({ invitation: updated })
@@ -319,14 +357,32 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         update: { status: 'rejected' },
       }) as Invitation
 
+      const eventData = {
+        invitationId: invitation.token,
+        identifier: invitation.identifier || '',
+        contextType: invitation.contextType,
+        contextId: invitation.contextId,
+        timestamp: new Date(),
+      }
+
+      // Execute action hook AFTER updating status (with rollback on error)
+      if (config?.actions?.onInvitationRejected) {
+        try {
+          await config.actions.onInvitationRejected(eventData, ctx)
+        } catch (error) {
+          // Rollback: Revert invitation status back to pending
+          await ctx.context.adapter.update({
+            model: 'invitation',
+            where: [{ field: 'token', value: invitation.token }],
+            update: { status: 'pending' },
+          })
+          throw error
+        }
+      }
+
+      // Audit hook runs AFTER successful rejection (for logging only)
       if (config?.audit?.onInvitationRejected) {
-        await config.audit.onInvitationRejected({
-          invitationId: invitation.token,
-          identifier: invitation.identifier || '',
-          contextType: invitation.contextType,
-          contextId: invitation.contextId,
-          timestamp: new Date(),
-        })
+        await config.audit.onInvitationRejected(eventData)
       }
 
       return ctx.json(updated)
@@ -377,15 +433,36 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         },
       }) as Invitation
 
+      const eventData = {
+        invitationId: invitation.token,
+        identifier: invitation.identifier || '',
+        contextType: resource.contextType,
+        contextId: resource.contextId,
+        cancelledBy,
+        timestamp: new Date(),
+      }
+
+      // Execute action hook AFTER updating status (with rollback on error)
+      if (config?.actions?.onInvitationCancelled) {
+        try {
+          await config.actions.onInvitationCancelled(eventData, ctx)
+        } catch (error) {
+          // Rollback: Revert invitation status back to pending
+          await ctx.context.adapter.update({
+            model: 'invitation',
+            where: [{ field: 'token', value: token }],
+            update: {
+              status: 'pending',
+              cancelledAt: null,
+            },
+          })
+          throw error
+        }
+      }
+
+      // Audit hook runs AFTER successful cancellation (for logging only)
       if (config?.audit?.onInvitationCancelled) {
-        await config.audit.onInvitationCancelled({
-          invitationId: invitation.token,
-          identifier: invitation.identifier || '',
-          contextType: resource.contextType,
-          contextId: resource.contextId,
-          cancelledBy,
-          timestamp: new Date(),
-        })
+        await config.audit.onInvitationCancelled(eventData)
       }
 
       return ctx.json(updated)

@@ -250,4 +250,46 @@ export type AuditEvent =
   | InvitationRejectedEvent
   | InvitationCancelledEvent
   | RoleStatementAddedEvent
-  | RoleStatementRemovedEvent
+  | RoleStatementRemovedEvent;
+
+
+/**
+ * Action Hooks interface
+ * These hooks are called AFTER the database operation with full context access
+ * They have access to the adapter, session, and ctx for performing additional operations
+ * If an action hook throws an error, the database operation will be automatically rolled back
+ *
+ * Action hooks are intended for:
+ * - Creating related entities (e.g., creating a user when accepting an invitation)
+ * - Adding members to organizations/teams after invitation acceptance
+ * - Executing side effects that need to be atomic with the main operation
+ *
+ * For simple logging/auditing without side effects, use AuditHooks instead
+ */
+export interface ActionHooks {
+  /**
+   * Called AFTER creating an invitation in the database
+   * If this hook throws, the invitation will be deleted (automatic rollback)
+   * Use this for sending emails, creating related records, etc.
+   */
+  onInvitationCreated?: (event: InvitationCreatedEvent, ctx: any) => Promise<void> | void
+
+  /**
+   * Called AFTER updating invitation status to 'accepted'
+   * If this hook throws, the invitation status will be reverted to 'pending' (automatic rollback)
+   * Use this for creating the user account, adding them as a member, etc.
+   */
+  onInvitationAccepted?: (event: InvitationAcceptedEvent, ctx: any) => Promise<void> | void
+
+  /**
+   * Called AFTER updating invitation status to 'rejected'
+   * If this hook throws, the invitation status will be reverted to 'pending' (automatic rollback)
+   */
+  onInvitationRejected?: (event: InvitationRejectedEvent, ctx: any) => Promise<void> | void
+
+  /**
+   * Called AFTER updating invitation status to 'cancelled'
+   * If this hook throws, the invitation status will be reverted to 'pending' (automatic rollback)
+   */
+  onInvitationCancelled?: (event: InvitationCancelledEvent, ctx: any) => Promise<void> | void
+}

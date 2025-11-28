@@ -1,5 +1,5 @@
 import type { CacheHooks } from './hooks'
-import type { AuditHooks } from './events'
+import type { AuditHooks, ActionHooks } from './events'
 
 /**
  * Plugin configuration for Better Auth Tenancy
@@ -51,9 +51,18 @@ export interface TenancyConfig {
 
   /**
    * Audit hooks - user implements their own audit logging
-   * Called on role changes, permission grants/denies, entity creation/deletion
+   * Called AFTER successful operations for logging/auditing purposes
+   * These hooks don't have access to ctx and cannot perform rollback
    */
   audit?: AuditHooks
+
+  /**
+   * Action hooks - user implements business logic with automatic rollback
+   * Called AFTER the database operation with full context access
+   * If these hooks throw an error, the operation will be rolled back automatically
+   * Use for: user creation, member addition, sending emails, or other side effects
+   */
+  actions?: ActionHooks
 
   /**
    * Internationalization configuration

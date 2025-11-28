@@ -27,8 +27,9 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Explicit grants/denies**: Override role permissions at user level (deny-first policy)
 - **Temporal permissions**: Set expiration dates for temporary access
 - **Multi-language support**: i18n for permission names and descriptions
-- **Invitation system**: Built-in email-based invitation workflow with multiple delivery methods
-- **Audit hooks**: Track all permission and entity changes
+- **Invitation system**: Built-in invitation workflow with multiple delivery methods
+- **Action hooks**: Execute business logic with automatic rollback on errors (user creation, member addition, etc.)
+- **Audit hooks**: Track all permission and entity changes (logging/monitoring only)
 - **Cache integration**: Configurable caching for high performance
 - **Database-agnostic**: Works with any Better Auth database adapter
 - **Universal client**: Single import works seamlessly in web and React Native/Expo (~70 lines, 85% smaller)
@@ -294,13 +295,37 @@ export const auth = betterAuth({
         },
       },
 
-      // Optional: Audit hooks for logging
+      // Optional: Action hooks - business logic with automatic rollback
+      actions: {
+        async onInvitationAccepted(event, ctx) {
+          // Create user and add as member
+          const adapter = ctx.context.adapter
+          const user = await adapter.create({
+            model: 'user',
+            data: { email: event.identifier }
+          })
+          await adapter.create({
+            model: `${event.contextType}Member`,
+            data: {
+              userId: user.id,
+              [`${event.contextType}Id`]: event.contextId,
+              roleId: event.roleId
+            }
+          })
+          // If fails, invitation status reverts to 'pending' automatically
+        },
+      },
+
+      // Optional: Audit hooks - logging only
       audit: {
         async onEntityCreated(event) {
           console.log('Entity created:', event)
         },
         async onPermissionGranted(event) {
           console.log('Permission granted:', event)
+        },
+        async onInvitationAccepted(event) {
+          console.log('Invitation accepted:', event)
         },
       },
 
@@ -860,9 +885,10 @@ function App() {
 2. **Validate user input** on the server side
 3. **Use deny rules** for sensitive permissions
 4. **Set expiration dates** for temporary permissions
-5. **Audit permission changes** using audit hooks
-6. **Implement rate limiting** on invitation endpoints
-7. **Use environment variables** for sensitive configuration
+5. **Use action hooks** for critical business logic (user creation, member addition) with automatic rollback
+6. **Use audit hooks** for logging and monitoring permission changes
+7. **Implement rate limiting** on invitation endpoints
+8. **Use environment variables** for sensitive configuration
 
 ## 📝 Development
 
