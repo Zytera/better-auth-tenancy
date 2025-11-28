@@ -33,6 +33,26 @@ export async function findInvitationContext(
   return null
 }
 
+export async function findInvitationContextById(
+  adapter: Adapter,
+  id: string
+): Promise<ResourceContext | null> {
+  const invitation = await adapter.findOne({
+    model: 'invitation',
+    where: [{ field: 'id', value: id }],
+  }).catch(() => null) as Invitation | null
+
+  if (invitation) {
+    return {
+      contextType: invitation.contextType,
+      contextId: invitation.contextId,
+      data: invitation,
+    }
+  }
+
+  return null
+}
+
 export interface CreateInvitationInput {
   identifier?: string
   contextType: ContextType
@@ -394,7 +414,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'POST',
       body: z.object({
-        token: z.string(),
+        id: z.string(),
       }),
       metadata: {
         openapi: {
@@ -407,9 +427,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const cancelledBy = session.user.id
 
-      const { token } = ctx.body
+      const { id } = ctx.body
 
-      const resource = await findInvitationContext(ctx.context.adapter, token)
+      const resource = await findInvitationContextById(ctx.context.adapter, id)
       if (!resource) {
         throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
       }
@@ -426,7 +446,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       const updated = await ctx.context.adapter.update({
         model: 'invitation',
-        where: [{ field: 'token', value: token }],
+        where: [{ field: 'id', value: id }],
         update: {
           status: 'cancelled',
           cancelledAt: new Date(),
@@ -450,7 +470,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           // Rollback: Revert invitation status back to pending
           await ctx.context.adapter.update({
             model: 'invitation',
-            where: [{ field: 'token', value: token }],
+            where: [{ field: 'id', value: id }],
             update: {
               status: 'pending',
               cancelledAt: null,
