@@ -168,7 +168,29 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      return ctx.json(member, { status: 201 })
+      // Enrich with user and role data for consistent response
+      const user = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: userId }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (roleId) {
+        const roleModel = contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (userId, roleId) - keep only enriched objects
+      const { userId: _, roleId: __, ...memberWithoutDuplicates } = member
+
+      return ctx.json({
+        ...memberWithoutDuplicates,
+        user: user ? { id: user.id, name: user.name, image: user.image } : null,
+        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+      }, { status: 201 })
     }
   ),
 
@@ -182,7 +204,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'Get member',
-          description: 'Get member by ID',
+          description: 'Get member by ID with enriched user and role data',
         },
       },
     },
@@ -196,19 +218,91 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         model: 'organizationMember',
         where: [{ field: 'id', value: id }],
       }).catch(() => null) as OrganizationMember | null
-      if (orgMember) return ctx.json(orgMember)
+      if (orgMember) {
+        // Enrich with user data
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: orgMember.userId }],
+        }).catch(() => null) as any
+
+        // Enrich with role data
+        let role = null
+        if (orgMember.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'organizationRole',
+            where: [{ field: 'id', value: orgMember.roleId }],
+          }).catch(() => null) as any
+        }
+
+        // Remove duplicate fields (userId, roleId) - keep only enriched objects
+        const { userId, roleId, ...memberWithoutDuplicates } = orgMember
+
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
+      }
 
       const teamMember = await ctx.context.adapter.findOne({
         model: 'teamMember',
         where: [{ field: 'id', value: id }],
       }).catch(() => null) as TeamMember | null
-      if (teamMember) return ctx.json(teamMember)
+      if (teamMember) {
+        // Enrich with user data
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: teamMember.userId }],
+        }).catch(() => null) as any
+
+        // Enrich with role data
+        let role = null
+        if (teamMember.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'teamRole',
+            where: [{ field: 'id', value: teamMember.roleId }],
+          }).catch(() => null) as any
+        }
+
+        // Remove duplicate fields (userId, roleId) - keep only enriched objects
+        const { userId, roleId, ...memberWithoutDuplicates } = teamMember
+
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
+      }
 
       const subteamMember = await ctx.context.adapter.findOne({
         model: 'subteamMember',
         where: [{ field: 'id', value: id }],
       }).catch(() => null) as SubteamMember | null
-      if (subteamMember) return ctx.json(subteamMember)
+      if (subteamMember) {
+        // Enrich with user data
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: subteamMember.userId }],
+        }).catch(() => null) as any
+
+        // Enrich with role data
+        let role = null
+        if (subteamMember.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'teamRole',
+            where: [{ field: 'id', value: subteamMember.roleId }],
+          }).catch(() => null) as any
+        }
+
+        // Remove duplicate fields (userId, roleId) - keep only enriched objects
+        const { userId, roleId, ...memberWithoutDuplicates } = subteamMember
+
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
+      }
 
       throw new APIError('NOT_FOUND', { message: 'Member not found' })
     }
@@ -284,7 +378,26 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      return ctx.json(updated)
+      // Enrich with user and role data for consistent response
+      const user = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: updated.userId }],
+      }).catch(() => null) as any
+
+      const roleModel = memberType === 'organization' ? 'organizationRole' : 'teamRole'
+      const role = await ctx.context.adapter.findOne({
+        model: roleModel,
+        where: [{ field: 'id', value: roleId }],
+      }).catch(() => null) as any
+
+      // Remove duplicate fields (userId, roleId) - keep only enriched objects
+      const { userId, roleId: _, ...memberWithoutDuplicates } = updated
+
+      return ctx.json({
+        ...memberWithoutDuplicates,
+        user: user ? { id: user.id, name: user.name, image: user.image } : null,
+        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+      })
     }
   ),
 
@@ -320,7 +433,27 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'id', value: id }],
           update: { metadata },
         }) as OrganizationMember
-        return ctx.json(updated)
+
+        // Enrich with user and role data for consistent response
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: updated.userId }],
+        }).catch(() => null) as any
+
+        let role = null
+        if (updated.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'organizationRole',
+            where: [{ field: 'id', value: updated.roleId }],
+          }).catch(() => null) as any
+        }
+
+        const { userId, roleId, ...memberWithoutDuplicates } = updated
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
       }
 
       const teamMember = await ctx.context.adapter.findOne({
@@ -333,7 +466,27 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'id', value: id }],
           update: { metadata },
         }) as TeamMember
-        return ctx.json(updated)
+
+        // Enrich with user and role data for consistent response
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: updated.userId }],
+        }).catch(() => null) as any
+
+        let role = null
+        if (updated.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'teamRole',
+            where: [{ field: 'id', value: updated.roleId }],
+          }).catch(() => null) as any
+        }
+
+        const { userId, roleId, ...memberWithoutDuplicates } = updated
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
       }
 
       const subteamMember = await ctx.context.adapter.findOne({
@@ -346,7 +499,27 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'id', value: id }],
           update: { metadata },
         }) as SubteamMember
-        return ctx.json(updated)
+
+        // Enrich with user and role data for consistent response
+        const user = await ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: updated.userId }],
+        }).catch(() => null) as any
+
+        let role = null
+        if (updated.roleId) {
+          role = await ctx.context.adapter.findOne({
+            model: 'teamRole',
+            where: [{ field: 'id', value: updated.roleId }],
+          }).catch(() => null) as any
+        }
+
+        const { userId, roleId, ...memberWithoutDuplicates } = updated
+        return ctx.json({
+          ...memberWithoutDuplicates,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        })
       }
 
       throw new APIError('NOT_FOUND', { message: 'Member not found' })
@@ -499,7 +672,56 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       items = items.slice(offset, offset + limit)
 
-      return ctx.json({ items, total, limit, offset })
+      // Batch fetch users and roles for better performance (avoid N+1 queries)
+      const userIds = [...new Set(items.map(m => m.userId))]
+      const roleIds = [...new Set(items.map(m => m.roleId).filter(Boolean))] as string[]
+
+      // Fetch all users in one query
+      const usersPromises = userIds.map(userId =>
+        ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: userId }],
+        }).catch(() => null)
+      )
+      const users = await Promise.all(usersPromises) as any[]
+      const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
+
+      // Fetch all roles in one batch
+      const roleModel = contextType === 'organization' ? 'organizationRole' :
+                       contextType === 'team' ? 'teamRole' : 'teamRole'
+      const rolesPromises = roleIds.map(roleId =>
+        ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: roleId }],
+        }).catch(() => null)
+      )
+      const roles = await Promise.all(rolesPromises) as any[]
+      const roleMap = new Map(roles.filter(Boolean).map(r => [r.id, r]))
+
+      // Enrich members with cached user and role data
+      const enrichedItems = items.map((member) => {
+        const user = userMap.get(member.userId)
+        const role = member.roleId ? roleMap.get(member.roleId) : null
+
+        // Remove duplicate fields (userId, roleId) - keep only enriched objects
+        const { userId, roleId, ...memberWithoutDuplicates } = member
+
+        return {
+          ...memberWithoutDuplicates,
+          user: user ? {
+            id: user.id,
+            name: user.name,
+            image: user.image,
+          } : null,
+          role: role ? {
+            id: role.id,
+            name: role.name,
+            description: role.description,
+          } : null,
+        }
+      })
+
+      return ctx.json({ items: enrichedItems, total, limit, offset })
     }
   ),
 

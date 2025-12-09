@@ -3,7 +3,7 @@ import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api
 import type { Adapter } from 'better-auth'
 import type { OrganizationRole, TeamRole } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import type { StatementId } from '../types/statement'
+import type { StatementId } from '../types'
 import { applyEndpointAuth, requireSession } from './middleware'
 
 /**
@@ -212,7 +212,40 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      return ctx.json(resource.data)
+      const role = resource.data as OrganizationRole | TeamRole
+      const isOrgRole = resource.contextType === 'organization'
+      const relationModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
+
+      // Fetch role-statement relations
+      const roleStatements = await ctx.context.adapter.findMany({
+        model: relationModel,
+        where: [{ field: 'roleId', value: role.id }],
+      }) as any[]
+
+      // Batch fetch all statements for better performance
+      const statementIds = roleStatements.map(rs => rs.statementId)
+      const statementsPromises = statementIds.map(statementId =>
+        ctx.context.adapter.findOne({
+          model: 'statement',
+          where: [{ field: 'id', value: statementId }],
+        }).catch(() => null)
+      )
+      const statementsArray = await Promise.all(statementsPromises) as any[]
+
+      const statements = statementsArray
+        .filter(Boolean)
+        .map(s => ({
+          id: s.id,
+          category: s.category,
+          operation: s.operation,
+          description: s.description,
+        }))
+
+      return ctx.json({
+        ...role,
+        statements,
+        statementCount: statements.length,
+      })
     }
   ),
 
@@ -341,11 +374,12 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         contextId: z.string(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
+        includeStatements: z.coerce.boolean().optional(),
       }),
       metadata: {
         openapi: {
           summary: 'List roles',
-          description: 'List all roles in a context with pagination',
+          description: 'List all roles in a context with pagination. Use includeStatements=true to include full statement details.',
         },
       },
     },
@@ -353,7 +387,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const session = await getSessionFromCtx(ctx)
       await applyEndpointAuth(config?.endpoints?.role?.list, ctx, session)
 
-      const { contextType, contextId, limit = 50, offset = 0 } = ctx.query
+      const { contextType, contextId, limit = 50, offset = 0, includeStatements = false } = ctx.query
 
       const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
       const field = contextType === 'organization' ? 'organizationId' : 'teamId'
@@ -366,6 +400,67 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const total = items.length
 
       items = items.slice(offset, offset + limit)
+
+      // Conditionally enrich roles with their statements
+      if (includeStatements) {
+        const isOrgRole = contextType === 'organization'
+        const relationModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
+
+        // Batch fetch all role-statement relations for all roles
+        const roleIds = items.map(r => r.id)
+        const allRoleStatementsPromises = roleIds.map(roleId =>
+          ctx.context.adapter.findMany({
+            model: relationModel,
+            where: [{ field: 'roleId', value: roleId }],
+          }).catch(() => [])
+        )
+        const allRoleStatementsArrays = await Promise.all(allRoleStatementsPromises) as any[][]
+
+        // Flatten and get unique statement IDs
+        const allRoleStatements = allRoleStatementsArrays.flat()
+        const statementIds = [...new Set(allRoleStatements.map((rs: any) => rs.statementId))]
+
+        // Batch fetch all statements
+        const statementsPromises = statementIds.map(statementId =>
+          ctx.context.adapter.findOne({
+            model: 'statement',
+            where: [{ field: 'id', value: statementId }],
+          }).catch(() => null)
+        )
+        const statementsArray = await Promise.all(statementsPromises) as any[]
+        const statementMap = new Map(
+          statementsArray.filter(Boolean).map(s => [s.id, {
+            id: s.id,
+            category: s.category,
+            operation: s.operation,
+            description: s.description,
+          }])
+        )
+
+        // Build role -> statements mapping
+        const roleStatementsMap = new Map<string, any[]>()
+        allRoleStatementsArrays.forEach((roleStatements, index) => {
+          const roleId = roleIds[index]
+          if (roleId) {
+            const statements = roleStatements
+              .map((rs: any) => statementMap.get(rs.statementId))
+              .filter(Boolean)
+            roleStatementsMap.set(roleId, statements)
+          }
+        })
+
+        // Enrich roles with their statements
+        const enrichedItems = items.map((role) => {
+          const statements = roleStatementsMap.get(role.id) || []
+          return {
+            ...role,
+            statements,
+            statementCount: statements.length,
+          }
+        })
+
+        return ctx.json({ items: enrichedItems, total, limit, offset })
+      }
 
       return ctx.json({ items, total, limit, offset })
     }

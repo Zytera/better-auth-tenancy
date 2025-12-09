@@ -162,7 +162,37 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         await config.audit.onInvitationCreated(eventData)
       }
 
-      return ctx.json(invitation, { status: 201 })
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: invitation.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (invitation.roleId) {
+        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: invitation.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token: _, invitedBy: __, roleId: ___, ...safeInvitation } = invitation
+
+      return ctx.json({
+        ...safeInvitation,
+        invitedByUser: invitedByUser ? {
+          id: invitedByUser.id,
+          name: invitedByUser.name,
+          image: invitedByUser.image,
+        } : null,
+        role: role ? {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        } : null,
+      }, { status: 201 })
     }
   ),
 
@@ -193,8 +223,37 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
 
-      const { token, ...safeInvitation } = invitation
-      return ctx.json(safeInvitation)
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: invitation.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (invitation.roleId) {
+        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: invitation.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token, invitedBy, roleId, ...safeInvitation } = invitation
+
+      return ctx.json({
+        ...safeInvitation,
+        invitedByUser: invitedByUser ? {
+          id: invitedByUser.id,
+          name: invitedByUser.name,
+          image: invitedByUser.image,
+        } : null,
+        role: role ? {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        } : null,
+      })
     }
   ),
 
@@ -229,8 +288,37 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
 
-      const { token, ...safeInvitation } = invitation
-      return ctx.json(safeInvitation)
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: invitation.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (invitation.roleId) {
+        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: invitation.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token, invitedBy, roleId, ...safeInvitation } = invitation
+
+      return ctx.json({
+        ...safeInvitation,
+        invitedByUser: invitedByUser ? {
+          id: invitedByUser.id,
+          name: invitedByUser.name,
+          image: invitedByUser.image,
+        } : null,
+        role: role ? {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        } : null,
+      })
     }
   ),
 
@@ -325,7 +413,39 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         await config.audit.onInvitationAccepted(eventData)
       }
 
-      return ctx.json({ invitation: updated })
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: updated.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (updated.roleId) {
+        const roleModel = updated.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: updated.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token: _token, invitedBy, roleId: _roleId, ...safeInvitation } = updated
+
+      return ctx.json({
+        invitation: {
+          ...safeInvitation,
+          invitedByUser: invitedByUser ? {
+            id: invitedByUser.id,
+            name: invitedByUser.name,
+              image: invitedByUser.image,
+          } : null,
+          role: role ? {
+            id: role.id,
+            name: role.name,
+            description: role.description,
+          } : null,
+        }
+      })
     }
   ),
 
@@ -405,7 +525,37 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         await config.audit.onInvitationRejected(eventData)
       }
 
-      return ctx.json(updated)
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: updated.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (updated.roleId) {
+        const roleModel = updated.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: updated.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token: _token, invitedBy, roleId: _roleId, ...safeInvitation } = updated
+
+      return ctx.json({
+        ...safeInvitation,
+        invitedByUser: invitedByUser ? {
+          id: invitedByUser.id,
+          name: invitedByUser.name,
+          image: invitedByUser.image,
+        } : null,
+        role: role ? {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        } : null,
+      })
     }
   ),
 
@@ -485,7 +635,37 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         await config.audit.onInvitationCancelled(eventData)
       }
 
-      return ctx.json(updated)
+      // Enrich with user and role data for consistent response
+      const invitedByUser = await ctx.context.adapter.findOne({
+        model: 'user',
+        where: [{ field: 'id', value: updated.invitedBy }],
+      }).catch(() => null) as any
+
+      let role = null
+      if (updated.roleId) {
+        const roleModel = resource.contextType === 'organization' ? 'organizationRole' : 'teamRole'
+        role = await ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: updated.roleId }],
+        }).catch(() => null) as any
+      }
+
+      // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+      const { token, invitedBy, roleId, ...safeInvitation } = updated
+
+      return ctx.json({
+        ...safeInvitation,
+        invitedByUser: invitedByUser ? {
+          id: invitedByUser.id,
+          name: invitedByUser.name,
+          image: invitedByUser.image,
+        } : null,
+        role: role ? {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        } : null,
+      })
     }
   ),
 
@@ -529,9 +709,56 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const total = items.length
       items = items.slice(offset, offset + limit)
 
-      const safeItems = items.map(({ token, ...item }) => item)
+      // Batch fetch users and roles for better performance (avoid N+1 queries)
+      const invitedByUserIds = [...new Set(items.map(i => i.invitedBy))]
+      const roleIds = [...new Set(items.map(i => i.roleId).filter(Boolean))] as string[]
 
-      return ctx.json({ items: safeItems, total, limit, offset })
+      // Fetch all invitedBy users in batch
+      const usersPromises = invitedByUserIds.map(userId =>
+        ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: userId }],
+        }).catch(() => null)
+      )
+      const users = await Promise.all(usersPromises) as any[]
+      const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
+
+      // Fetch all roles in batch
+      const roleModel = contextType === 'organization' ? 'organizationRole' :
+                       contextType === 'team' ? 'teamRole' : 'teamRole'
+      const rolesPromises = roleIds.map(roleId =>
+        ctx.context.adapter.findOne({
+          model: roleModel,
+          where: [{ field: 'id', value: roleId }],
+        }).catch(() => null)
+      )
+      const roles = await Promise.all(rolesPromises) as any[]
+      const roleMap = new Map(roles.filter(Boolean).map(r => [r.id, r]))
+
+      // Enrich invitations with cached user and role data
+      const enrichedItems = items.map((invitation) => {
+        const invitedByUser = userMap.get(invitation.invitedBy)
+        const role = invitation.roleId ? roleMap.get(invitation.roleId) : null
+
+        // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+        const { token, invitedBy, roleId, ...safeInvitation } = invitation
+
+        return {
+          ...safeInvitation,
+          invitedByUser: invitedByUser ? {
+            id: invitedByUser.id,
+            name: invitedByUser.name,
+              image: invitedByUser.image,
+          } : null,
+          role: role ? {
+            id: role.id,
+            name: role.name,
+            description: role.description,
+          } : null,
+        }
+      })
+
+      return ctx.json({ items: enrichedItems, total, limit, offset })
     }
   ),
 
@@ -566,9 +793,67 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where,
       }) as Invitation[]
 
-      const safeInvitations = invitations.map(({ token, ...inv }) => inv)
+      // Batch fetch users and roles for better performance (avoid N+1 queries)
+      const invitedByUserIds = [...new Set(invitations.map(i => i.invitedBy))]
 
-      return ctx.json(safeInvitations)
+      // Fetch all invitedBy users in batch
+      const usersPromises = invitedByUserIds.map(userId =>
+        ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: userId }],
+        }).catch(() => null)
+      )
+      const users = await Promise.all(usersPromises) as any[]
+      const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
+
+      // Group invitations by contextType to optimize role fetching
+      const invitationsByContext = invitations.reduce((acc, inv) => {
+        if (!acc[inv.contextType]) acc[inv.contextType] = []
+        acc[inv.contextType]!.push(inv)
+        return acc
+      }, {} as Record<string, Invitation[]>)
+
+      // Fetch roles for each context type separately
+      const roleMap = new Map()
+      for (const [contextType, contextInvitations] of Object.entries(invitationsByContext)) {
+        const contextRoleIds = [...new Set(contextInvitations.map(i => i.roleId).filter(Boolean))] as string[]
+        if (contextRoleIds.length > 0) {
+          const roleModel = contextType === 'organization' ? 'organizationRole' : 'teamRole'
+          const rolesPromises = contextRoleIds.map(roleId =>
+            ctx.context.adapter.findOne({
+              model: roleModel,
+              where: [{ field: 'id', value: roleId }],
+            }).catch(() => null)
+          )
+          const roles = await Promise.all(rolesPromises) as any[]
+          roles.filter(Boolean).forEach(r => roleMap.set(r.id, r))
+        }
+      }
+
+      // Enrich invitations with cached user and role data
+      const enrichedInvitations = invitations.map((invitation) => {
+        const invitedByUser = userMap.get(invitation.invitedBy)
+        const role = invitation.roleId ? roleMap.get(invitation.roleId) : null
+
+        // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
+        const { token, invitedBy, roleId, ...safeInvitation } = invitation
+
+        return {
+          ...safeInvitation,
+          invitedByUser: invitedByUser ? {
+            id: invitedByUser.id,
+            name: invitedByUser.name,
+              image: invitedByUser.image,
+          } : null,
+          role: role ? {
+            id: role.id,
+            name: role.name,
+            description: role.description,
+          } : null,
+        }
+      })
+
+      return ctx.json(enrichedInvitations)
     }
   ),
 

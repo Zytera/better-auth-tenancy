@@ -423,7 +423,8 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                             limit?: number;
                             offset?: number;
                             orderBy?: 'createdAt' | 'name';
-                            orderDirection?: 'asc' | 'desc'
+                            orderDirection?: 'asc' | 'desc';
+                            includeStatements?: boolean
                         },
                         fetchOptions?: BetterFetchOption
                     ) => {
@@ -434,6 +435,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         if (data.offset) params.set('offset', String(data.offset))
                         if (data.orderBy) params.set('orderBy', data.orderBy)
                         if (data.orderDirection) params.set('orderDirection', data.orderDirection)
+                        if (data.includeStatements !== undefined) params.set('includeStatements', String(data.includeStatements))
 
                         return await $fetch(`/tenancy/role/list?${params}`, {
                             method: 'GET',
@@ -758,7 +760,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     cancel: async (
-                        data: { token: string },
+                        data: { id: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/invitation/cancel', {
