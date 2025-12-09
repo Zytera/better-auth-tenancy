@@ -239,7 +239,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
         return ctx.json({
           ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          user: user || null,
           role: role ? { id: role.id, name: role.name, description: role.description } : null,
         })
       }
@@ -269,7 +269,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
         return ctx.json({
           ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          user: user || null,
           role: role ? { id: role.id, name: role.name, description: role.description } : null,
         })
       }
@@ -299,7 +299,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
         return ctx.json({
           ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          user: user || null,
           role: role ? { id: role.id, name: role.name, description: role.description } : null,
         })
       }
