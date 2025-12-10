@@ -323,7 +323,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         model: 'team',
         where,
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
-      }) as Promise<Team[]>
+      }) as Team[]
 
       items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
       const total = items.length

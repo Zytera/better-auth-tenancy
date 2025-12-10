@@ -292,7 +292,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       let items = await ctx.context.adapter.findMany({
         model: 'organization',
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
-      }) as Promise<Organization[]>
+      }) as Organization[]
 
       items = await config.permissionFiltering.filterOrganizations(ctx, items)
       const total = items.length
