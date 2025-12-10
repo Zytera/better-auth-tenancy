@@ -222,24 +222,23 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'roleId', value: role.id }],
       }) as any[]
 
-      // Batch fetch all statements for better performance
+      // Batch fetch all statements using 'in' operator for better performance
       const statementIds = roleStatements.map(rs => rs.statementId)
-      const statementsPromises = statementIds.map(statementId =>
-        ctx.context.adapter.findOne({
-          model: 'statement',
-          where: [{ field: 'id', value: statementId }],
-        }).catch(() => null)
-      )
-      const statementsArray = await Promise.all(statementsPromises) as any[]
 
-      const statements = statementsArray
-        .filter(Boolean)
-        .map(s => ({
-          id: s.id,
-          category: s.category,
-          operation: s.operation,
-          description: s.description,
-        }))
+      let statementsArray: any[] = []
+      if (statementIds.length > 0) {
+        statementsArray = await ctx.context.adapter.findMany({
+          model: 'statement',
+          where: [{ field: 'id', operator: 'in', value: statementIds }],
+        }) as any[]
+      }
+
+      const statements = statementsArray.map(s => ({
+        id: s.id,
+        category: s.category,
+        operation: s.operation,
+        description: s.description,
+      }))
 
       return ctx.json({
         ...role,
@@ -427,16 +426,17 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         const allRoleStatements = allRoleStatementsArrays.flat()
         const statementIds = [...new Set(allRoleStatements.map((rs: any) => rs.statementId))]
 
-        // Batch fetch all statements
-        const statementsPromises = statementIds.map(statementId =>
-          ctx.context.adapter.findOne({
+        // Batch fetch all statements using 'in' operator
+        let statementsArray: any[] = []
+        if (statementIds.length > 0) {
+          statementsArray = await ctx.context.adapter.findMany({
             model: 'statement',
-            where: [{ field: 'id', value: statementId }],
-          }).catch(() => null)
-        )
-        const statementsArray = await Promise.all(statementsPromises) as any[]
+            where: [{ field: 'id', operator: 'in', value: statementIds }],
+          }) as any[]
+        }
+
         const statementMap = new Map(
-          statementsArray.filter(Boolean).map(s => [s.id, {
+          statementsArray.map(s => [s.id, {
             id: s.id,
             category: s.category,
             operation: s.operation,

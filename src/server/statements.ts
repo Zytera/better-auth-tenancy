@@ -4,7 +4,7 @@ import type { Statement, StatementTranslation } from '../schema'
 import type { StatementId } from '../types/statement'
 import type { TenancyConfig } from '../types/config'
 import { validateStatementId } from '../types/statement'
-import { getLocaleFromHeaders, getBestLocale } from '../utils/locale-helper'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 import { applyEndpointAuth, requireSession } from './middleware'
 
 export interface CreateStatementInput {
@@ -97,22 +97,32 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
 
       if (!statement) throw new APIError('NOT_FOUND', { message: 'Statement not found' })
 
-      const translations = await ctx.context.adapter.findMany({
+      // Fetch only the needed translation
+      const acceptLanguage = getLocaleFromHeaders(ctx.headers)
+      // Extract ISO alpha-2 code (first 2 chars) to match DB format
+      const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+
+      // Try to fetch translation in the preferred locale
+      let translations = await ctx.context.adapter.findMany({
         model: 'statementTranslation',
-        where: [{ field: 'statementId', value: statement.id }],
+        where: [
+          { field: 'statementId', value: statement.id },
+          { field: 'locale', value: preferredLocale }
+        ],
       }) as StatementTranslation[]
 
-      if (translations.length === 0) {
-        return ctx.json(statement)
+      // If no translation found and preferred locale is not 'en', fallback to English
+      if (translations.length === 0 && preferredLocale !== 'en') {
+        translations = await ctx.context.adapter.findMany({
+          model: 'statementTranslation',
+          where: [
+            { field: 'statementId', value: statement.id },
+            { field: 'locale', value: 'en' }
+          ],
+        }) as StatementTranslation[]
       }
 
-      const acceptLanguage = getLocaleFromHeaders(ctx.headers)
-      const availableLocales = translations.map((t) => t.locale)
-      const bestLocale = getBestLocale(acceptLanguage, availableLocales, config)
-
-      const translation = bestLocale
-        ? translations.find((t) => t.locale === bestLocale)
-        : translations[0]
+      const translation = translations[0]
 
       return ctx.json({
         ...statement,
@@ -263,12 +273,9 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         const categoryPrefixes = category.split(',').map(prefix => prefix.trim())
 
         // Build where conditions with OR connector for multiple prefixes
-        const where = categoryPrefixes.map((prefix, index) => ({
-          field: 'category',
-          operator: 'starts_with' as const,
-          value: prefix,
-          connector: (index === 0 ? undefined : 'OR') as 'OR' | undefined,
-        }))
+        const where: any[] = categoryPrefixes.flatMap((prefix, _) => {
+            return [{ field: 'category', operator: 'starts_with', value: prefix, connector: 'OR' }]
+        })
 
         const [fetchedItems, fetchedTotal] = await Promise.all([
           ctx.context.adapter.findMany({
@@ -283,7 +290,6 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
             where,
           })
         ])
-
         items = fetchedItems
         total = fetchedTotal
       } else {
@@ -304,29 +310,43 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         total = fetchedTotal
       }
 
-      const acceptLanguage = getLocaleFromHeaders(ctx.headers)
+      // Fetch only the needed translations for the items being returned
+      const statementIds = items.map(s => s.id)
 
-      const allTranslations = await ctx.context.adapter.findMany({
-        model: 'statementTranslation',
-      }) as StatementTranslation[]
+      let translations: StatementTranslation[] = []
+      if (statementIds.length > 0) {
+        const acceptLanguage = getLocaleFromHeaders(ctx.headers)
+        // Extract ISO alpha-2 code (first 2 chars) to match DB format
+        const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
 
-      const translationsByStatement = new Map<string, StatementTranslation[]>()
-      for (const translation of allTranslations) {
-        const existing = translationsByStatement.get(translation.statementId) || []
-        existing.push(translation)
-        translationsByStatement.set(translation.statementId, existing)
+        // Try to fetch translations in the preferred locale
+        translations = await ctx.context.adapter.findMany({
+          model: 'statementTranslation',
+          where: [
+            { field: 'statementId', operator: 'in', value: statementIds },
+            { field: 'locale', value: preferredLocale }
+          ],
+        }) as StatementTranslation[]
+
+        // If no translations found and preferred locale is not 'en', fallback to English
+        if (translations.length === 0 && preferredLocale !== 'en') {
+          translations = await ctx.context.adapter.findMany({
+            model: 'statementTranslation',
+            where: [
+              { field: 'statementId', operator: 'in', value: statementIds },
+              { field: 'locale', value: 'en' }
+            ],
+          }) as StatementTranslation[]
+        }
+      }
+
+      const translationsByStatement = new Map<string, StatementTranslation>()
+      for (const translation of translations) {
+        translationsByStatement.set(translation.statementId, translation)
       }
 
       const itemsWithTranslations = items.map((statement) => {
-        const translations = translationsByStatement.get(statement.id) || []
-        if (translations.length === 0) return statement
-
-        const availableLocales = translations.map((t) => t.locale)
-        const bestLocale = getBestLocale(acceptLanguage, availableLocales, config)
-
-        const translation = bestLocale
-          ? translations.find((t) => t.locale === bestLocale)
-          : translations[0]
+        const translation = translationsByStatement.get(statement.id)
 
         return {
           ...statement,
