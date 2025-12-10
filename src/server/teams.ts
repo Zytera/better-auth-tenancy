@@ -287,7 +287,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List teams',
-          description: 'List all teams in an organization with pagination and sorting',
+          description: 'List all teams in an organization. When permission filtering is configured, returns all filtered items without pagination.',
         },
       },
     },
@@ -297,21 +297,38 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
 
       const { organizationId, limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
-      let items = await ctx.context.adapter.findMany({
-        model: 'team',
-        where: [{ field: 'organizationId', value: organizationId }],
-        sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
-      }) as Team[]
+      const where = [{ field: 'organizationId', value: organizationId }]
 
-      if (config?.permissionFiltering?.filterTeams) {
-        items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
+      // If no permission filtering, use efficient pagination
+      if (!config?.permissionFiltering?.filterTeams) {
+        const [items, total] = await Promise.all([
+          ctx.context.adapter.findMany({
+            model: 'team',
+            where,
+            limit,
+            offset,
+            sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
+          }) as Promise<Team[]>,
+          ctx.context.adapter.count({
+            model: 'team',
+            where,
+          })
+        ])
+
+        return ctx.json({ items, total, limit, offset })
       }
 
+      // With permission filtering: fetch ALL, filter, return all filtered items (no pagination)
+      let items = await ctx.context.adapter.findMany({
+        model: 'team',
+        where,
+        sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
+      }) as Promise<Team[]>
+
+      items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
       const total = items.length
 
-      items = items.slice(offset, offset + limit)
-
-      return ctx.json({ items, total, limit, offset })
+      return ctx.json({ items, total })
     }
   ),
 })

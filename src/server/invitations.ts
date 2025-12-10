@@ -701,13 +701,19 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where.push({ field: 'status', value: status })
       }
 
-      let items = await ctx.context.adapter.findMany({
-        model: 'invitation',
-        where,
-      }) as Invitation[]
-
-      const total = items.length
-      items = items.slice(offset, offset + limit)
+      // Execute findMany and count in parallel for better performance
+      const [items, total] = await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'invitation',
+          where,
+          limit,
+          offset,
+        }) as Promise<Invitation[]>,
+        ctx.context.adapter.count({
+          model: 'invitation',
+          where,
+        })
+      ])
 
       // Batch fetch users and roles for better performance (avoid N+1 queries)
       const invitedByUserIds = [...new Set(items.map(i => i.invitedBy))]

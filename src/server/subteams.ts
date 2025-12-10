@@ -248,7 +248,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List subteams',
-          description: 'List all subteams in a team with pagination',
+          description: 'List all subteams in a team. When permission filtering is configured, returns all filtered items without pagination.',
         },
       },
     },
@@ -258,29 +258,46 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
 
       const { teamId, limit = 50, offset = 0 } = ctx.query
 
+      const where = [{ field: 'teamId', value: teamId }]
+
+      // If no permission filtering, use efficient pagination
+      if (!config?.permissionFiltering?.filterSubteams) {
+        const [items, total] = await Promise.all([
+          ctx.context.adapter.findMany({
+            model: 'subteam',
+            where,
+            limit,
+            offset,
+          }) as Promise<Subteam[]>,
+          ctx.context.adapter.count({
+            model: 'subteam',
+            where,
+          })
+        ])
+
+        return ctx.json({ items, total, limit, offset })
+      }
+
+      // With permission filtering: fetch ALL, filter, return all filtered items (no pagination)
       let items = await ctx.context.adapter.findMany({
         model: 'subteam',
-        where: [{ field: 'teamId', value: teamId }],
+        where,
       }) as Subteam[]
 
-      if (config?.permissionFiltering?.filterSubteams) {
-        const team = await ctx.context.adapter.findOne({
-          model: 'team',
-          where: [{ field: 'id', value: teamId }],
-        }) as any
-        if (team) {
-          items = await config.permissionFiltering.filterSubteams(ctx, items, {
-            teamId,
-            organizationId: team.organizationId
-          })
-        }
+      const team = await ctx.context.adapter.findOne({
+        model: 'team',
+        where: [{ field: 'id', value: teamId }],
+      }) as any
+      if (team) {
+        items = await config.permissionFiltering.filterSubteams(ctx, items, {
+          teamId,
+          organizationId: team.organizationId
+        })
       }
 
       const total = items.length
 
-      items = items.slice(offset, offset + limit)
-
-      return ctx.json({ items, total, limit, offset })
+      return ctx.json({ items, total })
     }
   ),
 })

@@ -337,6 +337,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         data?: {
                             limit?: number;
                             offset?: number;
+                            category?: string;
                             orderBy?: 'createdAt' | 'id';
                             orderDirection?: 'asc' | 'desc'
                         },
@@ -345,6 +346,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         const params = new URLSearchParams()
                         if (data?.limit) params.set('limit', String(data.limit))
                         if (data?.offset) params.set('offset', String(data.offset))
+                        if (data?.category) params.set('category', data.category)
                         if (data?.orderBy) params.set('orderBy', data.orderBy)
                         if (data?.orderDirection) params.set('orderDirection', data.orderDirection)
 
@@ -818,11 +820,15 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     getByIdentifier: async (
-                        data: { identifier: string },
+                        data: {
+                            identifier: string;
+                            status?: 'pending' | 'accepted' | 'rejected' | 'canceled' | 'expired';
+                        },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         const params = new URLSearchParams()
                         params.set('identifier', data.identifier)
+                        if (data.status) params.set('status', data.status)
 
                         return await $fetch(`/tenancy/invitation/by-identifier?${params}`, {
                             method: 'GET',

@@ -236,13 +236,16 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'GET',
       query: z.object({
-        limit: z.coerce.number().min(1).max(100).optional(),
+        limit: z.coerce.number().min(1).max(2000).optional(),
         offset: z.coerce.number().min(0).optional(),
+        category: z.string().optional(),
+        orderBy: z.enum(['createdAt', 'id']).optional(),
+        orderDirection: z.enum(['asc', 'desc']).optional(),
       }),
       metadata: {
         openapi: {
           summary: 'List statements',
-          description: 'List all statements with pagination and localized translations based on Accept-Language header',
+          description: 'List all statements with pagination and localized translations based on Accept-Language header. Use category param to filter by category prefixes (comma-separated).',
         },
       },
     },
@@ -250,13 +253,56 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       const session = await getSessionFromCtx(ctx)
       await applyEndpointAuth(config?.endpoints?.statement?.list, ctx, session)
 
-      const { limit = 50, offset = 0 } = ctx.query
+      const { limit = 50, offset = 0, category, orderBy, orderDirection } = ctx.query
 
-      let items = await ctx.context.adapter.findMany({
-        model: 'statement',
-      }) as Statement[]
+      let items: Statement[]
+      let total: number
 
-      const total = items.length
+      if (category) {
+        // Filter by category prefixes using starts_with operator
+        const categoryPrefixes = category.split(',').map(prefix => prefix.trim())
+
+        // Build where conditions with OR connector for multiple prefixes
+        const where = categoryPrefixes.map((prefix, index) => ({
+          field: 'category',
+          operator: 'starts_with' as const,
+          value: prefix,
+          connector: (index === 0 ? undefined : 'OR') as 'OR' | undefined,
+        }))
+
+        const [fetchedItems, fetchedTotal] = await Promise.all([
+          ctx.context.adapter.findMany({
+            model: 'statement',
+            where,
+            limit,
+            offset,
+            sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
+          }) as Promise<Statement[]>,
+          ctx.context.adapter.count({
+            model: 'statement',
+            where,
+          })
+        ])
+
+        items = fetchedItems
+        total = fetchedTotal
+      } else {
+        // Without filter, use efficient adapter pagination
+        const [fetchedItems, fetchedTotal] = await Promise.all([
+          ctx.context.adapter.findMany({
+            model: 'statement',
+            limit,
+            offset,
+            sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
+          }) as Promise<Statement[]>,
+          ctx.context.adapter.count({
+            model: 'statement',
+          })
+        ])
+
+        items = fetchedItems
+        total = fetchedTotal
+      }
 
       const acceptLanguage = getLocaleFromHeaders(ctx.headers)
 
@@ -270,8 +316,6 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         existing.push(translation)
         translationsByStatement.set(translation.statementId, existing)
       }
-
-      items = items.slice(offset, offset + limit)
 
       const itemsWithTranslations = items.map((statement) => {
         const translations = translationsByStatement.get(statement.id) || []

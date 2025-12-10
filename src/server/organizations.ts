@@ -261,7 +261,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List organizations',
-          description: 'List all organizations with pagination and sorting',
+          description: 'List all organizations. When permission filtering is configured, returns all filtered items without pagination.',
         },
       },
     },
@@ -271,20 +271,33 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
 
       const { limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
+      // If no permission filtering, use efficient pagination
+      if (!config?.permissionFiltering?.filterOrganizations) {
+        const [items, total] = await Promise.all([
+          ctx.context.adapter.findMany({
+            model: 'organization',
+            limit,
+            offset,
+            sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
+          }) as Promise<Organization[]>,
+          ctx.context.adapter.count({
+            model: 'organization',
+          })
+        ])
+
+        return ctx.json({ items, total, limit, offset })
+      }
+
+      // With permission filtering: fetch ALL, filter, return all filtered items (no pagination)
       let items = await ctx.context.adapter.findMany({
         model: 'organization',
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
-      }) as Organization[]
+      }) as Promise<Organization[]>
 
-      if (config?.permissionFiltering?.filterOrganizations) {
-        items = await config.permissionFiltering.filterOrganizations(ctx, items)
-      }
-
+      items = await config.permissionFiltering.filterOrganizations(ctx, items)
       const total = items.length
 
-      items = items.slice(offset, offset + limit)
-
-      return ctx.json({ items, total, limit, offset })
+      return ctx.json({ items, total })
     }
   ),
 })
