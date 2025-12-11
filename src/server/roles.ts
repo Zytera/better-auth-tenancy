@@ -233,12 +233,47 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         }) as any[]
       }
 
-      const statements = statementsArray.map(s => ({
-        id: s.id,
-        category: s.category,
-        operation: s.operation,
-        description: s.description,
-      }))
+      // Fetch translations for the statements
+      let translations: any[] = []
+      if (statementIds.length > 0) {
+        const acceptLanguage = ctx.headers?.get('accept-language') || null
+        const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+
+        translations = await ctx.context.adapter.findMany({
+          model: 'statementTranslation',
+          where: [
+            { field: 'statementId', operator: 'in', value: statementIds },
+            { field: 'locale', value: preferredLocale }
+          ],
+        }) as any[]
+
+        // Fallback to English if no translations found
+        if (translations.length === 0 && preferredLocale !== 'en') {
+          translations = await ctx.context.adapter.findMany({
+            model: 'statementTranslation',
+            where: [
+              { field: 'statementId', operator: 'in', value: statementIds },
+              { field: 'locale', value: 'en' }
+            ],
+          }) as any[]
+        }
+      }
+
+      const translationMap = new Map(translations.map(t => [t.statementId, t]))
+
+      const statements = statementsArray.map(s => {
+        const translation = translationMap.get(s.id)
+        return {
+          id: s.id,
+          category: s.category,
+          operation: s.operation,
+          translation: translation ? {
+            locale: translation.locale,
+            name: translation.name,
+            description: translation.description,
+          } : undefined,
+        }
+      })
 
       return ctx.json({
         ...role,
@@ -435,13 +470,48 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
           }) as any[]
         }
 
+        // Fetch translations for the statements
+        let translations: any[] = []
+        if (statementIds.length > 0) {
+          const acceptLanguage = ctx.headers?.get('accept-language') || null
+          const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+
+          translations = await ctx.context.adapter.findMany({
+            model: 'statementTranslation',
+            where: [
+              { field: 'statementId', operator: 'in', value: statementIds },
+              { field: 'locale', value: preferredLocale }
+            ],
+          }) as any[]
+
+          // Fallback to English if no translations found
+          if (translations.length === 0 && preferredLocale !== 'en') {
+            translations = await ctx.context.adapter.findMany({
+              model: 'statementTranslation',
+              where: [
+                { field: 'statementId', operator: 'in', value: statementIds },
+                { field: 'locale', value: 'en' }
+              ],
+            }) as any[]
+          }
+        }
+
+        const translationMap = new Map(translations.map(t => [t.statementId, t]))
+
         const statementMap = new Map(
-          statementsArray.map(s => [s.id, {
-            id: s.id,
-            category: s.category,
-            operation: s.operation,
-            description: s.description,
-          }])
+          statementsArray.map(s => {
+            const translation = translationMap.get(s.id)
+            return [s.id, {
+              id: s.id,
+              category: s.category,
+              operation: s.operation,
+              translation: translation ? {
+                locale: translation.locale,
+                name: translation.name,
+                description: translation.description,
+              } : undefined,
+            }]
+          })
         )
 
         // Build role -> statements mapping
