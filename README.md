@@ -27,6 +27,7 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Explicit grants/denies**: Override role permissions at user level (deny-first policy)
 - **Temporal permissions**: Set expiration dates for temporary access
 - **Multi-language support**: i18n for permission names, descriptions, and error messages (English/Spanish built-in)
+- **Metadata validation**: Custom Zod schemas to validate metadata fields with required fields support
 - **Invitation system**: Built-in invitation workflow with multiple delivery methods
 - **Action hooks**: Execute business logic with automatic rollback on errors (user creation, member addition, etc.)
 - **Audit hooks**: Track all permission and entity changes (logging/monitoring only)
@@ -206,6 +207,116 @@ throw new APIError('BAD_REQUEST', {
 })
 
 // Result: "Cannot delete role assigned to 5 member(s)"
+```
+
+### 📋 Metadata Validation
+
+All entities (organizations, teams, subteams, members, invitations) include an optional `metadata` field that accepts any JSON data. You can define custom Zod schemas to validate metadata fields, and Better Auth will automatically validate them on create/update operations.
+
+**Why use metadata validation?**
+- ✅ Enforce required custom fields (e.g., `country`, `department`)
+- ✅ Type-safe metadata with automatic TypeScript inference
+- ✅ Native Better Auth validation (no manual checks needed)
+- ✅ Consistent API error messages for invalid data
+
+**Server configuration:**
+
+```typescript
+import { z } from 'zod'
+
+tenancy({
+  schemas: {
+    organization: {
+      metadata: z.object({
+        country: z.string().min(2, 'Country code required'),  // Required field
+        industry: z.string().optional(),                       // Optional field
+        employeeCount: z.number().positive().optional()
+      })
+    },
+    team: {
+      metadata: z.object({
+        department: z.string(),
+        budget: z.number().optional()
+      })
+    },
+    subteam: {
+      metadata: z.object({
+        location: z.string(),
+        capacity: z.number().optional()
+      })
+    },
+    member: {
+      metadata: z.object({
+        startDate: z.string(),
+        position: z.string().optional()
+      })
+    },
+    invitation: {
+      metadata: z.object({
+        inviterNote: z.string().optional(),
+        customMessage: z.string().optional()
+      })
+    }
+  }
+})
+```
+
+**Usage example:**
+
+```typescript
+// ✅ Valid - includes required fields
+await authClient.tenancy.organization.create({
+  name: 'Acme Corp',
+  slug: 'acme-corp',
+  metadata: {
+    country: 'ES',
+    industry: 'Technology',
+    employeeCount: 150
+  }
+})
+
+// ❌ Invalid - missing required 'country' field
+await authClient.tenancy.organization.create({
+  name: 'Acme Corp',
+  slug: 'acme-corp',
+  metadata: {
+    industry: 'Technology'  // Error: Country code required
+  }
+})
+
+// ✅ Valid - metadata is optional
+await authClient.tenancy.organization.create({
+  name: 'Simple Org',
+  slug: 'simple-org'
+  // No metadata provided - this is fine
+})
+```
+
+**How it works:**
+1. Define Zod schemas in the `schemas` configuration
+2. Better Auth automatically validates metadata when creating/updating entities
+3. Invalid data returns a validation error before hitting the database
+4. If no custom schema is provided, metadata accepts any JSON (`Record<string, unknown>`)
+
+**TypeScript type safety:**
+
+```typescript
+// Define your metadata type
+interface OrgMetadata {
+  country: string
+  industry?: string
+  employeeCount?: number
+}
+
+// Use with type assertion
+const org = await authClient.tenancy.organization.create({
+  name: 'Acme Corp',
+  slug: 'acme-corp',
+  metadata: {
+    country: 'ES',
+    industry: 'Tech'
+  } as OrgMetadata
+})
 ```
 
 ### 🔍 Permission Filtering Hooks
@@ -424,6 +535,41 @@ export const auth = betterAuth({
             'role.not_found': 'Rol no encontrado personalizado',
             'member.limit_reached': 'Límite de miembros alcanzado'
           }
+        }
+      },
+
+      // Optional: Metadata validation schemas
+      schemas: {
+        organization: {
+          metadata: z.object({
+            country: z.string().min(2, 'Country code required'),
+            industry: z.string().optional(),
+            employeeCount: z.number().positive().optional()
+          })
+        },
+        team: {
+          metadata: z.object({
+            department: z.string(),
+            budget: z.number().optional()
+          })
+        },
+        subteam: {
+          metadata: z.object({
+            location: z.string(),
+            capacity: z.number().optional()
+          })
+        },
+        member: {
+          metadata: z.object({
+            startDate: z.string(),
+            position: z.string().optional()
+          })
+        },
+        invitation: {
+          metadata: z.object({
+            inviterNote: z.string().optional(),
+            customMessage: z.string().optional()
+          })
         }
       },
     }),

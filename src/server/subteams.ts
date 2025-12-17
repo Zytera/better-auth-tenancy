@@ -29,7 +29,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         teamId: z.string(),
         name: z.string().min(1).max(100),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.subteam?.metadata ?? z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
@@ -135,7 +135,7 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         id: z.string(),
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.subteam?.metadata?.optional() ?? z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {

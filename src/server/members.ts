@@ -90,7 +90,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         contextType: z.enum(['organization', 'team', 'subteam']),
         contextId: z.string(),
         roleId: z.string().optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.member?.metadata ?? z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
@@ -410,7 +410,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         id: z.string(),
-        metadata: z.record(z.unknown()),
+        metadata: config?.schemas?.member?.metadata ?? z.record(z.unknown()),
       }),
       metadata: {
         openapi: {

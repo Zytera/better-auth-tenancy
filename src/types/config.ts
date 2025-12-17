@@ -1,5 +1,6 @@
 import type { CacheHooks } from './hooks'
 import type { AuditHooks, ActionHooks } from './events'
+import type { z } from 'zod'
 
 /**
  * Plugin configuration for Better Auth Tenancy
@@ -79,6 +80,34 @@ export interface TenancyConfig {
    * Allows users to implement custom logic to filter results based on permissions
    */
   permissionFiltering?: PermissionFilteringHooks
+
+  /**
+   * Custom metadata validation schemas
+   * Define Zod schemas to validate metadata fields for each entity
+   * Better Auth will automatically validate these schemas when creating/updating entities
+   *
+   * @example
+   * ```typescript
+   * import { z } from 'zod'
+   *
+   * schemas: {
+   *   organization: {
+   *     metadata: z.object({
+   *       country: z.string().min(2, 'Country code required'),
+   *       industry: z.string().optional(),
+   *       employeeCount: z.number().positive().optional()
+   *     })
+   *   },
+   *   team: {
+   *     metadata: z.object({
+   *       department: z.string(),
+   *       budget: z.number().optional()
+   *     })
+   *   }
+   * }
+   * ```
+   */
+  schemas?: MetadataSchemas
 }
 
 /**
@@ -460,4 +489,101 @@ export interface PermissionFilteringHooks {
     members: T[],
     context: { subteamId: string; teamId: string; organizationId: string }
   ) => Promise<T[]>
+}
+
+/**
+ * Custom metadata validation schemas
+ * Define Zod schemas to validate metadata fields for each entity type
+ * Better Auth will automatically validate the request body using these schemas
+ */
+export interface MetadataSchemas {
+  /**
+   * Organization metadata schema
+   * Validates the metadata field when creating or updating organizations
+   *
+   * @example
+   * ```typescript
+   * organization: {
+   *   metadata: z.object({
+   *     country: z.string().min(2),
+   *     industry: z.string().optional()
+   *   })
+   * }
+   * ```
+   */
+  organization?: {
+    metadata?: z.ZodType<any>
+  }
+
+  /**
+   * Team metadata schema
+   * Validates the metadata field when creating or updating teams
+   *
+   * @example
+   * ```typescript
+   * team: {
+   *   metadata: z.object({
+   *     department: z.string(),
+   *     budget: z.number().optional()
+   *   })
+   * }
+   * ```
+   */
+  team?: {
+    metadata?: z.ZodType<any>
+  }
+
+  /**
+   * Subteam metadata schema
+   * Validates the metadata field when creating or updating subteams
+   *
+   * @example
+   * ```typescript
+   * subteam: {
+   *   metadata: z.object({
+   *     location: z.string(),
+   *     capacity: z.number().optional()
+   *   })
+   * }
+   * ```
+   */
+  subteam?: {
+    metadata?: z.ZodType<any>
+  }
+
+  /**
+   * Member metadata schema (applies to organization, team, and subteam members)
+   * Validates the metadata field when adding or updating members
+   *
+   * @example
+   * ```typescript
+   * member: {
+   *   metadata: z.object({
+   *     startDate: z.string(),
+   *     position: z.string().optional()
+   *   })
+   * }
+   * ```
+   */
+  member?: {
+    metadata?: z.ZodType<any>
+  }
+
+  /**
+   * Invitation metadata schema
+   * Validates the metadata field when creating invitations
+   *
+   * @example
+   * ```typescript
+   * invitation: {
+   *   metadata: z.object({
+   *     inviterNote: z.string().optional(),
+   *     customMessage: z.string().optional()
+   *   })
+   * }
+   * ```
+   */
+  invitation?: {
+    metadata?: z.ZodType<any>
+  }
 }

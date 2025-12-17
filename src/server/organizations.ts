@@ -28,7 +28,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         name: z.string().min(1).max(100),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.organization?.metadata ?? z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
@@ -154,7 +154,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         id: z.string(),
         name: z.string().min(1).max(100).optional(),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
-        metadata: z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.organization?.metadata?.optional() ?? z.record(z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
