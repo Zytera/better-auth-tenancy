@@ -26,7 +26,7 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Statement-based permissions**: Fine-grained permissions like `team:create`, `member:add`
 - **Explicit grants/denies**: Override role permissions at user level (deny-first policy)
 - **Temporal permissions**: Set expiration dates for temporary access
-- **Multi-language support**: i18n for permission names and descriptions
+- **Multi-language support**: i18n for permission names, descriptions, and error messages (English/Spanish built-in)
 - **Invitation system**: Built-in invitation workflow with multiple delivery methods
 - **Action hooks**: Execute business logic with automatic rollback on errors (user creation, member addition, etc.)
 - **Audit hooks**: Track all permission and entity changes (logging/monitoring only)
@@ -124,7 +124,9 @@ await authClient.tenancy.invitation.accept({
 
 ### 🌍 Internationalization (i18n)
 
-Full multi-language support with automatic locale detection:
+Full multi-language support with automatic locale detection and error messages:
+
+#### Client-Side Locale
 
 ```typescript
 // Universal client with locale preference
@@ -141,6 +143,70 @@ const client = createAuthClient({
 ```
 
 The API automatically selects the best translation based on the `Accept-Language` header following standard HTTP content negotiation rules.
+
+#### Server-Side Error Messages
+
+All error messages support internationalization with automatic locale detection:
+
+```typescript
+// Server configuration
+tenancy({
+  i18n: {
+    defaultLocale: 'es',  // Default to Spanish if no Accept-Language header
+
+    // Custom error message translations (optional)
+    errorMessages: {
+      en: {
+        'role.not_found': 'Role not found',
+        'member.limit_reached': 'Member limit reached'
+      },
+      es: {
+        'role.not_found': 'Rol no encontrado',
+        'member.limit_reached': 'Límite de miembros alcanzado'
+      },
+      fr: {
+        'role.not_found': 'Rôle introuvable',
+        'member.limit_reached': 'Limite de membres atteinte'
+      }
+    }
+  }
+})
+```
+
+**Built-in translations (English and Spanish):**
+- Role errors: `role.not_found`, `role.already_exists`, `role.limit_reached`, `role.delete.in_use_members`
+- Statement errors: `statement.not_found`, `statement.already_exists`, `statement.delete.in_use_roles`
+- Member errors: `member.not_found`, `member.limit_reached`
+- Organization errors: `organization.not_found`, `organization.slug_exists`
+- Team errors: `team.not_found`, `team.slug_exists`, `team.limit_reached`
+- Subteam errors: `subteam.not_found`, `subteam.slug_exists`, `subteam.limit_reached`
+- Invitation errors: `invitation.not_found`, `invitation.expired`, `invitation.already_accepted`
+
+**How it works:**
+1. The API extracts the ISO alpha-2 language code from the `Accept-Language` header
+2. Falls back to `defaultLocale` (if configured) or `'en'` if no header is present
+3. Checks custom error messages first, then built-in translations
+4. Always falls back to English if translation is not found
+
+**Message interpolation:**
+Error messages support parameter interpolation with `{{variable}}` syntax:
+
+```typescript
+// Message template
+'role.delete.in_use_members': 'Cannot delete role assigned to {{count}} member(s)'
+
+// Usage (automatic)
+throw new APIError('BAD_REQUEST', {
+  message: getErrorMessage(
+    'role.delete.in_use_members',
+    locale,
+    { count: 5 },  // Parameters
+    customMessages
+  )
+})
+
+// Result: "Cannot delete role assigned to 5 member(s)"
+```
 
 ### 🔍 Permission Filtering Hooks
 
@@ -350,8 +416,15 @@ export const auth = betterAuth({
 
       // Optional: i18n configuration
       i18n: {
-        defaultLocale: 'en',
-        supportedLocales: ['en', 'es', 'fr'],
+        defaultLocale: 'en',  // Used when Accept-Language header is missing
+
+        // Custom error message translations (optional)
+        errorMessages: {
+          es: {
+            'role.not_found': 'Rol no encontrado personalizado',
+            'member.limit_reached': 'Límite de miembros alcanzado'
+          }
+        }
       },
     }),
   ],

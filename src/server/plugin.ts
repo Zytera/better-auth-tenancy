@@ -1,4 +1,4 @@
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig } from '../types'
 import type { BetterAuthPlugin } from 'better-auth'
 import { organizationEndpoints } from './organizations'
 import { teamEndpoints } from './teams'
@@ -266,11 +266,6 @@ function validateConfig(config?: TenancyConfig): void {
         throw new Error('[BetterAuthTenancy] All limits must be positive numbers')
       }
     }
-  }
-
-  // Validate i18n config
-  if (config.i18n?.supportedLocales && !Array.isArray(config.i18n.supportedLocales)) {
-    throw new Error('[BetterAuthTenancy] i18n.supportedLocales must be an array')
   }
 
   // Validate invitation config

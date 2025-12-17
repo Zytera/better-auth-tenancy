@@ -5,6 +5,8 @@ import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth, requireSession } from './middleware'
+import { getErrorMessage } from '../utils/error-messages'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 export type Member = OrganizationMember | TeamMember | SubteamMember
 
@@ -115,7 +117,10 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }) as Member[]
         const limit = config.limits.maxMembersPerOrganization
         if (limit && allMembers.length >= limit) {
-          throw new APIError('BAD_REQUEST', { message: 'Member limit reached' })
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('member.limit_reached', locale, undefined, config?.i18n?.errorMessages)
+          })
         }
       }
 
@@ -294,7 +299,10 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      throw new APIError('NOT_FOUND', {
+        message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+      })
     }
   ),
 
@@ -321,13 +329,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findMemberContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Member not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.member?.updateRole, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const existing = resource.data as Member
       const memberType = resource.contextType
@@ -508,7 +519,10 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      throw new APIError('NOT_FOUND', { message: 'Member not found' })
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      throw new APIError('NOT_FOUND', {
+        message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+      })
     }
   ),
 
@@ -534,13 +548,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findMemberContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Member not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.member?.remove, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const existing = resource.data as Member
       const memberType = resource.contextType
@@ -552,6 +569,41 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
             ? 'teamMember'
             : 'subteamMember'
 
+      // Delete member's permission grants and denies
+      const [grants, denies] = await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'permissionGrant',
+          where: [
+            { field: 'userId', value: existing.userId },
+            { field: 'contextType', value: memberType },
+            { field: 'contextId', value: resource.contextId },
+          ],
+        }) as Promise<any[]>,
+        ctx.context.adapter.findMany({
+          model: 'permissionDeny',
+          where: [
+            { field: 'userId', value: existing.userId },
+            { field: 'contextType', value: memberType },
+            { field: 'contextId', value: resource.contextId },
+          ],
+        }) as Promise<any[]>
+      ])
+
+      for (const grant of grants) {
+        await ctx.context.adapter.delete({
+          model: 'permissionGrant',
+          where: [{ field: 'id', value: grant.id }],
+        })
+      }
+
+      for (const deny of denies) {
+        await ctx.context.adapter.delete({
+          model: 'permissionDeny',
+          where: [{ field: 'id', value: deny.id }],
+        })
+      }
+
+      // Delete the member
       await ctx.context.adapter.delete({
         model: modelName,
         where: [{ field: 'id', value: id }],

@@ -2,10 +2,11 @@ import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Statement, StatementTranslation } from '../schema'
 import type { StatementId } from '../types/statement'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig } from '../types'
 import { validateStatementId } from '../types/statement'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 import { applyEndpointAuth, requireSession } from './middleware'
+import { getErrorMessage } from '../utils/error-messages'
 
 export interface CreateStatementInput {
   id: StatementId
@@ -165,7 +166,12 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         model: 'statement',
         where: [{ field: 'id', value: id }],
       }) as Statement | null
-      if (!current) throw new APIError('NOT_FOUND', { message: 'Statement not found' })
+      if (!current) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('statement.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
       const changes: Record<string, { old: unknown; new: unknown }> = {}
       if (category && category !== current.category) {
@@ -221,8 +227,70 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         model: 'statement',
         where: [{ field: 'id', value: id }],
       }) as Statement | null
-      if (!statement) throw new APIError('NOT_FOUND', { message: 'Statement not found' })
+      if (!statement) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('statement.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
+      // Check if statement is used in role statements
+      const [orgRoleStatements, teamRoleStatements] = await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'organizationRoleStatement',
+          where: [{ field: 'statementId', value: id }],
+        }) as Promise<any[]>,
+        ctx.context.adapter.findMany({
+          model: 'teamRoleStatement',
+          where: [{ field: 'statementId', value: id }],
+        }) as Promise<any[]>
+      ])
+
+      const roleStatementsCount = orgRoleStatements.length + teamRoleStatements.length
+      if (roleStatementsCount > 0) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage(
+            'statement.delete.in_use_roles',
+            locale,
+            { count: roleStatementsCount },
+            config?.i18n?.errorMessages
+          ),
+        })
+      }
+
+      // Check if statement is used in permissions
+      const [grants, denies] = await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'permissionGrant',
+          where: [{ field: 'statementId', value: id }],
+        }) as Promise<any[]>,
+        ctx.context.adapter.findMany({
+          model: 'permissionDeny',
+          where: [{ field: 'statementId', value: id }],
+        }) as Promise<any[]>
+      ])
+
+      const permissionsCount = grants.length + denies.length
+      if (permissionsCount > 0) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage(
+            'statement.delete.in_use_permissions',
+            locale,
+            { count: permissionsCount },
+            config?.i18n?.errorMessages
+          ),
+        })
+      }
+
+      // Delete statement translations
+      await ctx.context.adapter.delete({
+        model: 'statementTranslation',
+        where: [{ field: 'statementId', value: id }],
+      })
+
+      // Delete the statement
       await ctx.context.adapter.delete({
         model: 'statement',
         where: [{ field: 'id', value: id }],
@@ -315,9 +383,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
 
       let translations: StatementTranslation[] = []
       if (statementIds.length > 0) {
-        const acceptLanguage = getLocaleFromHeaders(ctx.headers)
-        // Extract ISO alpha-2 code (first 2 chars) to match DB format
-        const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+        const preferredLocale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
 
         // Try to fetch translations in the preferred locale
         translations = await ctx.context.adapter.findMany({
@@ -392,7 +458,16 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         try {
           const validation = validateStatementId(id)
           if (!validation.isValid) {
-            failed.push({ id, error: validation.error || 'Invalid statement ID' })
+            const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+            failed.push({
+              id,
+              error: getErrorMessage(
+                'statement.invalid_id',
+                locale,
+                { error: validation.error || 'Invalid statement ID' },
+                config?.i18n?.errorMessages
+              )
+            })
             continue
           }
 
@@ -401,7 +476,16 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
             where: [{ field: 'id', value: id }],
           }) as Statement | null
           if (existing) {
-            failed.push({ id, error: `Statement "${id}" already exists` })
+            const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+            failed.push({
+              id,
+              error: getErrorMessage(
+                'statement.already_exists',
+                locale,
+                { id },
+                config?.i18n?.errorMessages
+              )
+            })
             continue
           }
 

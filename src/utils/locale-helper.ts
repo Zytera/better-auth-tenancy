@@ -1,127 +1,49 @@
-import type { TenancyConfig } from '../types/config'
-
 /**
- * Parse Accept-Language header and return preferred locale
+ * Extract locale from request headers and return ISO alpha-2 code
  *
- * Examples:
- * - "en-US,en;q=0.9,es;q=0.8" → ["en-US", "en", "es"]
- * - "fr-FR,fr;q=0.9" → ["fr-FR", "fr"]
- * - "es" → ["es"]
+ * Supports both lowercase and capitalized header names
+ * Handles both Headers object and plain objects
+ * Always returns ISO alpha-2 code (first 2 chars) in lowercase
  *
- * @param acceptLanguage - Accept-Language header value
- * @returns Array of locales ordered by preference (q-factor)
+ * @param headers - Request headers (Headers object or plain object)
+ * @param defaultLocale - Default locale to use if Accept-Language header is not found (defaults to 'en')
+ * @returns ISO alpha-2 language code (e.g., 'en', 'es', 'fr')
+ *
+ * @example
+ * getLocaleFromHeaders(ctx.headers, 'es') // 'es' if no Accept-Language
+ * getLocaleFromHeaders(ctx.headers) // 'en' if no Accept-Language
  */
-export function parseAcceptLanguage(acceptLanguage: string): string[] {
-  if (!acceptLanguage) return []
+export function getLocaleFromHeaders(
+  headers: Record<string, string | string[] | undefined> | Headers | undefined,
+  defaultLocale?: string
+): string {
+  let acceptLanguage: string | undefined
 
-  return acceptLanguage
-    .split(',')
-    .map((lang) => {
-      const [locale, qValue] = lang.trim().split(';q=')
-      const q = qValue ? parseFloat(qValue) : 1.0
-      return { locale: (locale || '').trim(), q }
-    })
-    .filter((item) => item.locale) // Remove empty locales
-    .sort((a, b) => b.q - a.q) // Sort by quality factor (highest first)
-    .map((item) => item.locale)
-}
+  if (headers) {
+    // Handle Headers object (has .get method)
+    if ('get' in headers && typeof headers.get === 'function') {
+      acceptLanguage = headers.get('accept-language') ?? undefined
+    } else {
+      // Handle plain object - type assertion is safe here after the check above
+      const plainHeaders = headers as Record<string, string | string[] | undefined>
+      const headerValue =
+        plainHeaders['accept-language'] ||
+        plainHeaders['Accept-Language'] ||
+        plainHeaders['ACCEPT-LANGUAGE']
 
-/**
- * Normalize locale to base language
- * Examples:
- * - "en-US" → "en"
- * - "es-MX" → "es"
- * - "fr" → "fr"
- */
-export function normalizeLocale(locale: string): string {
-  return locale.split('-')[0]?.toLowerCase() || 'en'
-}
-
-/**
- * Get the best matching locale from available translations
- *
- * Tries to find:
- * 1. Exact match (e.g., "en-US")
- * 2. Base language match (e.g., "en" for "en-US")
- * 3. Default locale from config
- * 4. First available translation
- * 5. null if no translations
- *
- * @param acceptLanguage - Accept-Language header value
- * @param availableLocales - Array of available locale codes
- * @param config - Plugin configuration
- * @returns Best matching locale or null
- */
-export function getBestLocale(
-  acceptLanguage: string | undefined,
-  availableLocales: string[],
-  config?: TenancyConfig
-): string | null {
-  if (availableLocales.length === 0) return null
-
-  // Get default locale from config
-  const defaultLocale = config?.i18n?.defaultLocale || 'en'
-
-  // If no Accept-Language header, use default
-  if (!acceptLanguage) {
-    return availableLocales.includes(defaultLocale)
-      ? defaultLocale
-      : availableLocales[0] || null
-  }
-
-  // Parse Accept-Language header
-  const preferredLocales = parseAcceptLanguage(acceptLanguage)
-
-  // Try to find exact match first
-  for (const locale of preferredLocales) {
-    if (availableLocales.includes(locale)) {
-      return locale
+      if (Array.isArray(headerValue)) {
+        acceptLanguage = headerValue[0]
+      } else {
+        acceptLanguage = headerValue
+      }
     }
   }
 
-  // Try to find base language match
-  for (const locale of preferredLocales) {
-    const baseLocale = normalizeLocale(locale)
-    const match = availableLocales.find(
-      (available) => normalizeLocale(available) === baseLocale
-    )
-    if (match) return match
+  // If Accept-Language is found, extract ISO alpha-2 code (first 2 chars)
+  if (acceptLanguage) {
+    return acceptLanguage.substring(0, 2).toLowerCase()
   }
 
-  // Fallback to default locale
-  if (availableLocales.includes(defaultLocale)) {
-    return defaultLocale
-  }
-
-  // Last resort: return first available
-  return availableLocales[0] || null
-}
-
-/**
- * Extract locale from request headers
- * Supports both lowercase and capitalized header names
- * Handles both Headers object and plain objects
- */
-export function getLocaleFromHeaders(
-  headers: Record<string, string | string[] | undefined> | Headers | undefined
-): string | undefined {
-  if (!headers) return undefined
-
-  // Handle Headers object (has .get method)
-  if ('get' in headers && typeof headers.get === 'function') {
-    return headers.get('accept-language') ?? undefined
-  }
-
-  // Handle plain object - type assertion is safe here after the check above
-  const plainHeaders = headers as Record<string, string | string[] | undefined>
-  const acceptLanguage =
-    plainHeaders['accept-language'] ||
-    plainHeaders['Accept-Language'] ||
-    plainHeaders['ACCEPT-LANGUAGE']
-
-  if (Array.isArray(acceptLanguage)) {
-    return acceptLanguage[0]
-  }
-
-  return acceptLanguage
+  // Fallback to defaultLocale or 'en'
+  return defaultLocale || 'en'
 }

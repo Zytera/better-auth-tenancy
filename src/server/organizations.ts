@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Organization } from '../schema'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig } from '../types'
 import { cleanupContextPermissions } from './permissions'
 import { applyEndpointAuth, requireSession } from './middleware'
+import { getErrorMessage } from '../utils/error-messages'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 export interface CreateOrganizationInput {
   name: string
@@ -47,7 +49,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         model: 'organization',
         where: [{ field: 'slug', value: slug }],
       }) as Organization | null
-      if (existing) throw new APIError('BAD_REQUEST', { message: `Organization with slug "${slug}" already exists` })
+      if (existing) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage('organization.slug_exists', locale, { slug }, config?.i18n?.errorMessages)
+        })
+      }
 
       const organization = await ctx.context.adapter.create({
         model: 'organization',
@@ -94,7 +101,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'id', value: id }],
       }) as Organization | null
 
-      if (!organization) throw new APIError('NOT_FOUND', { message: 'Organization not found' })
+      if (!organization) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('organization.not_found', locale, { id }, config?.i18n?.errorMessages)
+        })
+      }
       return ctx.json(organization)
     }
   ),
@@ -124,7 +136,12 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'slug', value: slug }],
       }) as Organization | null
 
-      if (!organization) throw new APIError('NOT_FOUND', { message: 'Organization not found' })
+      if (!organization) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('organization.not_found', locale, { id: slug }, config?.i18n?.errorMessages)
+        })
+      }
       return ctx.json(organization)
     }
   ),
@@ -158,14 +175,24 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         model: 'organization',
         where: [{ field: 'id', value: id }],
       }) as Organization | null
-      if (!current) throw new APIError('NOT_FOUND', { message: `Organization with id "${id}" not found` })
+      if (!current) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('organization.not_found', locale, { id }, config?.i18n?.errorMessages)
+        })
+      }
 
       if (slug && slug !== current.slug) {
         const existing = await ctx.context.adapter.findOne({
           model: 'organization',
           where: [{ field: 'slug', value: slug }],
         }) as Organization | null
-        if (existing) throw new APIError('BAD_REQUEST', { message: `Organization with slug "${slug}" already exists` })
+        if (existing) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('organization.slug_exists', locale, { slug }, config?.i18n?.errorMessages)
+          })
+        }
       }
 
       const changes: Record<string, { old: unknown; new: unknown }> = {}
@@ -219,10 +246,130 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         model: 'organization',
         where: [{ field: 'id', value: id }],
       }) as Organization | null
-      if (!organization) throw new APIError('NOT_FOUND', { message: `Organization with id "${id}" not found` })
+      if (!organization) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('organization.not_found', locale, { id }, config?.i18n?.errorMessages)
+        })
+      }
 
+      // Cascade delete: Teams (which will cascade delete subteams, members, etc.)
+      const teams = await ctx.context.adapter.findMany({
+        model: 'team',
+        where: [{ field: 'organizationId', value: id }],
+      }) as any[]
+
+      for (const team of teams) {
+        // Delete subteams and their members/invitations
+        const subteams = await ctx.context.adapter.findMany({
+          model: 'subteam',
+          where: [{ field: 'teamId', value: team.id }],
+        }) as any[]
+
+        for (const subteam of subteams) {
+          // Delete subteam members
+          await ctx.context.adapter.delete({
+            model: 'subteamMember',
+            where: [{ field: 'subteamId', value: subteam.id }],
+          })
+
+          // Delete subteam invitations
+          await ctx.context.adapter.delete({
+            model: 'invitation',
+            where: [
+              { field: 'contextType', value: 'subteam' },
+              { field: 'contextId', value: subteam.id },
+            ],
+          })
+
+          // Delete subteam permissions
+          await cleanupContextPermissions(ctx.context.adapter, 'subteam', subteam.id)
+
+          // Delete subteam
+          await ctx.context.adapter.delete({
+            model: 'subteam',
+            where: [{ field: 'id', value: subteam.id }],
+          })
+        }
+
+        // Delete team roles and their statements
+        const teamRoles = await ctx.context.adapter.findMany({
+          model: 'teamRole',
+          where: [{ field: 'teamId', value: team.id }],
+        }) as any[]
+
+        for (const role of teamRoles) {
+          await ctx.context.adapter.delete({
+            model: 'teamRoleStatement',
+            where: [{ field: 'roleId', value: role.id }],
+          })
+          await ctx.context.adapter.delete({
+            model: 'teamRole',
+            where: [{ field: 'id', value: role.id }],
+          })
+        }
+
+        // Delete team members
+        await ctx.context.adapter.delete({
+          model: 'teamMember',
+          where: [{ field: 'teamId', value: team.id }],
+        })
+
+        // Delete team invitations
+        await ctx.context.adapter.delete({
+          model: 'invitation',
+          where: [
+            { field: 'contextType', value: 'team' },
+            { field: 'contextId', value: team.id },
+          ],
+        })
+
+        // Delete team permissions
+        await cleanupContextPermissions(ctx.context.adapter, 'team', team.id)
+
+        // Delete team
+        await ctx.context.adapter.delete({
+          model: 'team',
+          where: [{ field: 'id', value: team.id }],
+        })
+      }
+
+      // Delete organization roles and their statements
+      const orgRoles = await ctx.context.adapter.findMany({
+        model: 'organizationRole',
+        where: [{ field: 'organizationId', value: id }],
+      }) as any[]
+
+      for (const role of orgRoles) {
+        await ctx.context.adapter.delete({
+          model: 'organizationRoleStatement',
+          where: [{ field: 'roleId', value: role.id }],
+        })
+        await ctx.context.adapter.delete({
+          model: 'organizationRole',
+          where: [{ field: 'id', value: role.id }],
+        })
+      }
+
+      // Delete organization members
+      await ctx.context.adapter.delete({
+        model: 'organizationMember',
+        where: [{ field: 'organizationId', value: id }],
+      })
+
+      // Delete organization invitations
+      await ctx.context.adapter.delete({
+        model: 'invitation',
+        where: [
+          { field: 'contextType', value: 'organization' },
+          { field: 'contextId', value: id },
+        ],
+      })
+
+      // Delete organization permissions
       const cleanup = await cleanupContextPermissions(ctx.context.adapter, 'organization', id)
 
+      // Finally delete the organization
       await ctx.context.adapter.delete({
         model: 'organization',
         where: [{ field: 'id', value: id }],
@@ -235,6 +382,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
           entityName: organization.name,
           deletedBy,
           metadata: {
+            teamsDeleted: teams.length,
             permissionsDeleted: {
               grants: cleanup.grantsDeleted,
               denies: cleanup.deniesDeleted,

@@ -1,9 +1,11 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Subteam } from '../schema'
-import type { TenancyConfig } from '../types/config'
+import type { TenancyConfig } from '../types'
 import { cleanupContextPermissions } from './permissions'
 import { applyEndpointAuth, requireSession } from './middleware'
+import { getErrorMessage } from '../utils/error-messages'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 export interface CreateSubteamInput {
   teamId: string
@@ -50,7 +52,10 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'teamId', value: teamId }],
         }) as Subteam[]
         if (allSubteams.length >= config.limits.maxSubteamsPerTeam) {
-          throw new APIError('BAD_REQUEST', { message: 'Team has reached maximum number of subteams' })
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('subteam.limit_reached', locale, undefined, config?.i18n?.errorMessages)
+          })
         }
       }
 
@@ -60,7 +65,10 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
       }) as Subteam[]
       const existing = subteams.find((s) => s.slug === slug)
       if (existing) {
-        throw new APIError('BAD_REQUEST', { message: `Subteam with slug "${slug}" already exists` })
+        const acceptLanguage = getLocaleFromHeaders(ctx.headers)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage('subteam.slug_exists', acceptLanguage, { slug }, config?.i18n?.errorMessages)
+        })
       }
 
       const subteam = await ctx.context.adapter.create({
@@ -109,7 +117,12 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'id', value: id }],
       }) as Subteam | null
 
-      if (!subteam) throw new APIError('NOT_FOUND', { message: 'Subteam not found' })
+      if (!subteam) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('subteam.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
       return ctx.json(subteam)
     }
   ),
@@ -143,7 +156,12 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         model: 'subteam',
         where: [{ field: 'id', value: id }],
       }) as Subteam | null
-      if (!current) throw new APIError('NOT_FOUND', { message: 'Subteam not found' })
+      if (!current) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('subteam.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
       if (slug && slug !== current.slug) {
         const subteams = await ctx.context.adapter.findMany({
@@ -152,7 +170,10 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         }) as Subteam[]
         const existing = subteams.find((s) => s.slug === slug && s.id !== id)
         if (existing) {
-          throw new APIError('BAD_REQUEST', { message: `Subteam with slug "${slug}" already exists` })
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('subteam.slug_exists', locale, { slug }, config?.i18n?.errorMessages)
+          })
         }
       }
 
@@ -207,10 +228,32 @@ export const subteamEndpoints = (config?: TenancyConfig) => ({
         model: 'subteam',
         where: [{ field: 'id', value: id }],
       }) as Subteam | null
-      if (!subteam) throw new APIError('NOT_FOUND', { message: 'Subteam not found' })
+      if (!subteam) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('subteam.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
+      // Delete subteam members
+      await ctx.context.adapter.delete({
+        model: 'subteamMember',
+        where: [{ field: 'subteamId', value: id }],
+      })
+
+      // Delete subteam invitations
+      await ctx.context.adapter.delete({
+        model: 'invitation',
+        where: [
+          { field: 'contextType', value: 'subteam' },
+          { field: 'contextId', value: id },
+        ],
+      })
+
+      // Delete subteam permissions
       const cleanup = await cleanupContextPermissions(ctx.context.adapter, 'subteam', id)
 
+      // Finally delete the subteam
       await ctx.context.adapter.delete({
         model: 'subteam',
         where: [{ field: 'id', value: id }],

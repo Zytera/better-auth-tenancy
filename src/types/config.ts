@@ -272,16 +272,53 @@ export interface HierarchyLimits {
  */
 export interface I18nConfig {
   /**
-   * Default locale for statement names and descriptions
+   * Default locale to use when Accept-Language header is not present
+   * Uses ISO alpha-2 language code format (2 characters)
+   * Applied to both statement translations and error messages
    * @default 'en'
+   *
+   * @example
+   * ```typescript
+   * i18n: {
+   *   defaultLocale: 'es'  // Spanish by default
+   * }
+   * ```
    */
   defaultLocale?: string
 
   /**
-   * List of supported locales
-   * @default ['en']
+   * Custom error message translations
+   * Override default error messages or add translations for new languages
+   * Uses ISO alpha-2 language codes (2 characters)
+   *
+   * Built-in translations available: English ('en'), Spanish ('es')
+   *
+   * Error message keys support parameter interpolation with {{variable}} syntax
+   *
+   * @example
+   * ```typescript
+   * i18n: {
+   *   errorMessages: {
+   *     es: {
+   *       'role.not_found': 'Rol no encontrado',
+   *       'role.delete.in_use_members': 'No se puede eliminar el rol asignado a {{count}} miembro(s)',
+   *       'member.limit_reached': 'Límite de miembros alcanzado'
+   *     },
+   *     fr: {
+   *       'role.not_found': 'Rôle introuvable',
+   *       'member.limit_reached': 'Limite de membres atteinte'
+   *     }
+   *   }
+   * }
+   * ```
+   *
+   * How it works:
+   * 1. API extracts ISO alpha-2 code from Accept-Language header
+   * 2. Falls back to defaultLocale if header is missing
+   * 3. Checks custom errorMessages first, then built-in translations
+   * 4. Always falls back to English if translation not found
    */
-  supportedLocales?: string[]
+  errorMessages?: Record<string, Record<string, string>>
 }
 
 /**

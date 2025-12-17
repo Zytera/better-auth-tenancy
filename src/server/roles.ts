@@ -5,6 +5,8 @@ import type { OrganizationRole, TeamRole } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import type { StatementId } from '../types'
 import { applyEndpointAuth, requireSession } from './middleware'
+import { getErrorMessage } from '../utils/error-messages'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 /**
  * Find role and determine its context (organization or team)
@@ -96,8 +98,9 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
           where: [{ field, value: contextId }],
         }) as (OrganizationRole | TeamRole)[]
         if (allRoles.length >= maxRoles) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
           throw new APIError('BAD_REQUEST', {
-            message: `Role limit reached (${maxRoles} maximum)`,
+            message: getErrorMessage('role.limit_reached', locale, { limit: maxRoles }, config?.i18n?.errorMessages),
           })
         }
       }
@@ -110,8 +113,9 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'organizationId', value: contextId }],
         }) as OrganizationRole[]
         if (orgRoles.find((r: OrganizationRole) => r.name === name)) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
           throw new APIError('BAD_REQUEST', {
-            message: `Role "${name}" already exists`,
+            message: getErrorMessage('role.already_exists', locale, { name }, config?.i18n?.errorMessages),
           })
         }
         role = await ctx.context.adapter.create({
@@ -141,8 +145,9 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'teamId', value: contextId }],
         }) as TeamRole[]
         if (teamRoles.find((r: TeamRole) => r.name === name)) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
           throw new APIError('BAD_REQUEST', {
-            message: `Role "${name}" already exists`,
+            message: getErrorMessage('role.already_exists', locale, { name }, config?.i18n?.errorMessages),
           })
         }
         role = await ctx.context.adapter.create({
@@ -204,7 +209,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.role?.read, {
@@ -236,8 +244,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       // Fetch translations for the statements
       let translations: any[] = []
       if (statementIds.length > 0) {
-        const acceptLanguage = ctx.headers?.get('accept-language') || null
-        const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+        const preferredLocale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
 
         translations = await ctx.context.adapter.findMany({
           model: 'statementTranslation',
@@ -307,13 +314,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.role?.update, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const current = resource.data as OrganizationRole | TeamRole
       const isOrgRole = resource.contextType === 'organization'
@@ -369,17 +379,67 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.role?.delete, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const role = resource.data as OrganizationRole | TeamRole
       const isOrgRole = resource.contextType === 'organization'
 
+      // Check if role is assigned to any members
+      const memberModel = isOrgRole ? 'organizationMember' : 'teamMember'
+      const members = await ctx.context.adapter.findMany({
+        model: memberModel,
+        where: [{ field: 'roleId', value: id }],
+      }) as any[]
+
+      if (members.length > 0) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage(
+            'role.delete.in_use_members',
+            locale,
+            { count: members.length },
+            config?.i18n?.errorMessages
+          ),
+        })
+      }
+
+      // Also check subteam members if it's a team role
+      if (!isOrgRole) {
+        const subteamMembers = await ctx.context.adapter.findMany({
+          model: 'subteamMember',
+          where: [{ field: 'roleId', value: id }],
+        }) as any[]
+
+        if (subteamMembers.length > 0) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage(
+              'role.delete.in_use_subteam_members',
+              locale,
+              { count: subteamMembers.length },
+              config?.i18n?.errorMessages
+            ),
+          })
+        }
+      }
+
+      // Delete role statements
+      const statementModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
+      await ctx.context.adapter.delete({
+        model: statementModel,
+        where: [{ field: 'roleId', value: id }],
+      })
+
+      // Delete the role
       await ctx.context.adapter.delete({
         model: isOrgRole ? 'organizationRole' : 'teamRole',
         where: [{ field: 'id', value: id }],
@@ -473,8 +533,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         // Fetch translations for the statements
         let translations: any[] = []
         if (statementIds.length > 0) {
-          const acceptLanguage = ctx.headers?.get('accept-language') || null
-          const preferredLocale = acceptLanguage ? acceptLanguage.substring(0, 2).toLowerCase() : 'en'
+          const preferredLocale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
 
           translations = await ctx.context.adapter.findMany({
             model: 'statementTranslation',
@@ -566,7 +625,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.role?.addStatement, {
@@ -624,7 +686,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findRoleContext(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Role not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.role?.removeStatement, {

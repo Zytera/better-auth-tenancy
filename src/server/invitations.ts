@@ -12,6 +12,8 @@ import {
   canUseInvitation,
   calculateExpirationDate,
 } from '../utils/invitation-helper'
+import { getErrorMessage } from '../utils/error-messages'
+import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 export async function findInvitationContext(
   adapter: Adapter,
@@ -221,7 +223,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'token', value: tokenParam }],
       }) as Invitation | null
 
-      if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
+      if (!invitation) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('invitation.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
       // Enrich with user and role data for consistent response
       const invitedByUser = await ctx.context.adapter.findOne({
@@ -286,7 +293,12 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         where: [{ field: 'invitationCode', value: code }],
       }) as Invitation | null
 
-      if (!invitation) throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
+      if (!invitation) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('invitation.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
 
       // Enrich with user and role data for consistent response
       const invitedByUser = await ctx.context.adapter.findOne({
@@ -581,7 +593,10 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       const resource = await findInvitationContextById(ctx.context.adapter, id)
       if (!resource) {
-        throw new APIError('NOT_FOUND', { message: 'Invitation not found' })
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('invitation.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
       }
 
       await applyEndpointAuth(config?.endpoints?.invitation?.revoke, {
