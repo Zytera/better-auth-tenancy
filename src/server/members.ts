@@ -162,15 +162,31 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           break
       }
 
+      const memberEventData = {
+        userId,
+        contextType,
+        contextId,
+        roleId,
+        addedBy,
+        timestamp: new Date(),
+      }
+
+      if (config?.actions?.onMemberAdded) {
+        try {
+          await config.actions.onMemberAdded(memberEventData, ctx)
+        } catch (error) {
+          const modelName = contextType === 'organization' ? 'organizationMember' :
+            contextType === 'team' ? 'teamMember' : 'subteamMember'
+          await ctx.context.adapter.delete({
+            model: modelName,
+            where: [{ field: 'id', value: member.id }],
+          })
+          throw error
+        }
+      }
+
       if (config?.audit?.onMemberAdded) {
-        await config.audit.onMemberAdded({
-          userId,
-          contextType,
-          contextId,
-          roleId,
-          addedBy,
-          timestamp: new Date(),
-        })
+        await config.audit.onMemberAdded(memberEventData)
       }
 
       // Enrich with user and role data in parallel for consistent response
@@ -915,7 +931,8 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 export async function _addMember(
   adapter: Adapter,
   input: AddMemberInput,
-  config?: TenancyConfig
+  config?: TenancyConfig,
+  ctx?: any
 ): Promise<Member> {
   if (config?.limits) {
     const model = input.contextType === 'organization' ? 'organizationMember' : input.contextType === 'team' ? 'teamMember' : 'subteamMember'
@@ -968,15 +985,33 @@ export async function _addMember(
       break
   }
 
-  if (config?.audit?.onMemberAdded && input._addedBy) {
-    await config.audit.onMemberAdded({
+  if (input._addedBy) {
+    const memberEventData = {
       userId: input.userId,
       contextType: input.contextType,
       contextId: input.contextId,
       roleId: input.roleId,
       addedBy: input._addedBy,
       timestamp: new Date(),
-    })
+    }
+
+    if (config?.actions?.onMemberAdded && ctx) {
+      try {
+        await config.actions.onMemberAdded(memberEventData, ctx)
+      } catch (error) {
+        const modelName = input.contextType === 'organization' ? 'organizationMember' :
+          input.contextType === 'team' ? 'teamMember' : 'subteamMember'
+        await adapter.delete({
+          model: modelName,
+          where: [{ field: 'id', value: member.id }],
+        })
+        throw error
+      }
+    }
+
+    if (config?.audit?.onMemberAdded) {
+      await config.audit.onMemberAdded(memberEventData)
+    }
   }
 
   return member
