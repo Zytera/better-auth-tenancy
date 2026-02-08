@@ -61,15 +61,29 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         data: { name, slug, metadata },
       }) as Organization
 
+      const eventData = {
+        entityType: 'organization' as const,
+        entityId: organization.id,
+        entityName: organization.name,
+        createdBy,
+        metadata: organization.metadata ?? undefined,
+        timestamp: new Date(),
+      }
+
+      if (config?.actions?.onEntityCreated) {
+        try {
+          await config.actions.onEntityCreated(eventData, ctx)
+        } catch (error) {
+          await ctx.context.adapter.delete({
+            model: 'organization',
+            where: [{ field: 'id', value: organization.id }],
+          })
+          throw error
+        }
+      }
+
       if (config?.audit?.onEntityCreated) {
-        await config.audit.onEntityCreated({
-          entityType: 'organization',
-          entityId: organization.id,
-          entityName: organization.name,
-          createdBy,
-          metadata: organization.metadata ?? undefined,
-          timestamp: new Date(),
-        })
+        await config.audit.onEntityCreated(eventData)
       }
 
       return ctx.json(organization, { status: 201 })

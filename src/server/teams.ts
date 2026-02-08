@@ -76,16 +76,30 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         data: { organizationId, name, slug, metadata },
       }) as Team
 
+      const eventData = {
+        entityType: 'team' as const,
+        entityId: team.id,
+        entityName: team.name,
+        parentContext: { type: 'organization' as const, id: organizationId },
+        createdBy,
+        metadata: team.metadata ?? undefined,
+        timestamp: new Date(),
+      }
+
+      if (config?.actions?.onEntityCreated) {
+        try {
+          await config.actions.onEntityCreated(eventData, ctx)
+        } catch (error) {
+          await ctx.context.adapter.delete({
+            model: 'team',
+            where: [{ field: 'id', value: team.id }],
+          })
+          throw error
+        }
+      }
+
       if (config?.audit?.onEntityCreated) {
-        await config.audit.onEntityCreated({
-          entityType: 'team',
-          entityId: team.id,
-          entityName: team.name,
-          parentContext: { type: 'organization', id: organizationId },
-          createdBy,
-          metadata: team.metadata ?? undefined,
-          timestamp: new Date(),
-        })
+        await config.audit.onEntityCreated(eventData)
       }
 
       return ctx.json(team, { status: 201 })

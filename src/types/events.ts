@@ -268,6 +268,20 @@ export type AuditEvent =
  */
 export interface ActionHooks {
   /**
+   * Called AFTER creating an entity (organization, team, subteam) in the database
+   * If this hook throws, the entity will be deleted (automatic rollback)
+   * Use this for creating default roles, setting up initial permissions, etc.
+   */
+  onEntityCreated?: (event: EntityCreatedEvent, ctx: any) => Promise<void> | void
+
+  /**
+   * Called AFTER adding a member to a context (organization, team, subteam)
+   * If this hook throws, the member will be removed (automatic rollback)
+   * Use this for granting default permissions, sending notifications, etc.
+   */
+  onMemberAdded?: (event: MemberAddedEvent, ctx: any) => Promise<void> | void
+
+  /**
    * Called AFTER creating an invitation in the database
    * If this hook throws, the invitation will be deleted (automatic rollback)
    * Use this for sending emails, creating related records, etc.
