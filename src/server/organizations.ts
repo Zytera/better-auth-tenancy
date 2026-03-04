@@ -3,6 +3,7 @@ import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api
 import type { Organization } from '../schema'
 import type { TenancyConfig } from '../types'
 import { cleanupContextPermissions } from './permissions'
+import { deleteTeamRecursive } from './teams'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
@@ -267,108 +268,37 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      // Cascade delete: Teams (which will cascade delete subteams, members, etc.)
+      // Cascade delete: Teams (recursively deletes child teams, members, etc.)
       const teams = await ctx.context.adapter.findMany({
         model: 'team',
-        where: [{ field: 'organizationId', value: id }],
+        where: [{ field: 'parentType', value: 'organization' }, { field: 'parentId', value: id }],
       }) as any[]
 
       for (const team of teams) {
-        // Delete subteams and their members/invitations
-        const subteams = await ctx.context.adapter.findMany({
-          model: 'subteam',
-          where: [{ field: 'teamId', value: team.id }],
-        }) as any[]
-
-        for (const subteam of subteams) {
-          // Delete subteam members
-          await ctx.context.adapter.delete({
-            model: 'subteamMember',
-            where: [{ field: 'subteamId', value: subteam.id }],
-          })
-
-          // Delete subteam invitations
-          await ctx.context.adapter.delete({
-            model: 'invitation',
-            where: [
-              { field: 'contextType', value: 'subteam' },
-              { field: 'contextId', value: subteam.id },
-            ],
-          })
-
-          // Delete subteam permissions
-          await cleanupContextPermissions(ctx.context.adapter, 'subteam', subteam.id)
-
-          // Delete subteam
-          await ctx.context.adapter.delete({
-            model: 'subteam',
-            where: [{ field: 'id', value: subteam.id }],
-          })
-        }
-
-        // Delete team roles and their statements
-        const teamRoles = await ctx.context.adapter.findMany({
-          model: 'teamRole',
-          where: [{ field: 'teamId', value: team.id }],
-        }) as any[]
-
-        for (const role of teamRoles) {
-          await ctx.context.adapter.delete({
-            model: 'teamRoleStatement',
-            where: [{ field: 'roleId', value: role.id }],
-          })
-          await ctx.context.adapter.delete({
-            model: 'teamRole',
-            where: [{ field: 'id', value: role.id }],
-          })
-        }
-
-        // Delete team members
-        await ctx.context.adapter.delete({
-          model: 'teamMember',
-          where: [{ field: 'teamId', value: team.id }],
-        })
-
-        // Delete team invitations
-        await ctx.context.adapter.delete({
-          model: 'invitation',
-          where: [
-            { field: 'contextType', value: 'team' },
-            { field: 'contextId', value: team.id },
-          ],
-        })
-
-        // Delete team permissions
-        await cleanupContextPermissions(ctx.context.adapter, 'team', team.id)
-
-        // Delete team
-        await ctx.context.adapter.delete({
-          model: 'team',
-          where: [{ field: 'id', value: team.id }],
-        })
+        await deleteTeamRecursive(ctx.context.adapter, team.id, config)
       }
 
       // Delete organization roles and their statements
       const orgRoles = await ctx.context.adapter.findMany({
-        model: 'organizationRole',
-        where: [{ field: 'organizationId', value: id }],
+        model: 'role',
+        where: [{ field: 'contextType', value: 'organization' }, { field: 'contextId', value: id }],
       }) as any[]
 
       for (const role of orgRoles) {
         await ctx.context.adapter.delete({
-          model: 'organizationRoleStatement',
+          model: 'roleStatement',
           where: [{ field: 'roleId', value: role.id }],
         })
         await ctx.context.adapter.delete({
-          model: 'organizationRole',
+          model: 'role',
           where: [{ field: 'id', value: role.id }],
         })
       }
 
       // Delete organization members
       await ctx.context.adapter.delete({
-        model: 'organizationMember',
-        where: [{ field: 'organizationId', value: id }],
+        model: 'member',
+        where: [{ field: 'contextType', value: 'organization' }, { field: 'contextId', value: id }],
       })
 
       // Delete organization invitations

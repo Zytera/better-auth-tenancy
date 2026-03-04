@@ -57,15 +57,12 @@ export const CacheKeyPatterns = {
 
   // Role cache
   roleStatements: (roleId: string) => `better-auth-tenancy:role:${roleId}:statements`,
-  organizationRoles: (organizationId: string) =>
-    `better-auth-tenancy:organization:${organizationId}:roles:*`,
-  teamRoles: (teamId: string) => `better-auth-tenancy:team:${teamId}:roles:*`, // Subteams use team roles
+  roles: (contextType: string, contextId: string) =>
+    `better-auth-tenancy:${contextType}:${contextId}:roles:*`,
 
   // Member cache
-  organizationMembers: (organizationId: string) =>
-    `better-auth-tenancy:organization:${organizationId}:members:*`,
-  teamMembers: (teamId: string) => `better-auth-tenancy:team:${teamId}:members:*`,
-  subteamMembers: (subteamId: string) => `better-auth-tenancy:subteam:${subteamId}:members:*`,
+  members: (contextType: string, contextId: string) =>
+    `better-auth-tenancy:${contextType}:${contextId}:members:*`,
   userMemberships: (userId: string) => `better-auth-tenancy:user:${userId}:memberships:*`,
 
   // Hierarchy cache
@@ -73,7 +70,7 @@ export const CacheKeyPatterns = {
     `better-auth-tenancy:hierarchy:${contextType}:${contextId}`,
   teamsByOrganization: (organizationId: string) =>
     `better-auth-tenancy:organization:${organizationId}:teams`,
-  subteamsByTeam: (teamId: string) => `better-auth-tenancy:team:${teamId}:subteams`,
+  childTeams: (parentId: string) => `better-auth-tenancy:team:${parentId}:children`,
 
   // Invitation cache
   invitations: (contextType: string, contextId: string) =>

@@ -72,7 +72,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         identifier: z.string().optional(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
         roleId: z.string().optional(),
         expiresInHours: z.number().optional(),
@@ -172,9 +172,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (invitation.roleId) {
-        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: invitation.roleId }],
         }).catch(() => null) as any
       }
@@ -238,9 +237,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (invitation.roleId) {
-        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: invitation.roleId }],
         }).catch(() => null) as any
       }
@@ -308,9 +306,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (invitation.roleId) {
-        const roleModel = invitation.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: invitation.roleId }],
         }).catch(() => null) as any
       }
@@ -433,9 +430,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (updated.roleId) {
-        const roleModel = updated.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: updated.roleId }],
         }).catch(() => null) as any
       }
@@ -545,9 +541,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (updated.roleId) {
-        const roleModel = updated.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: updated.roleId }],
         }).catch(() => null) as any
       }
@@ -658,9 +653,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       let role = null
       if (updated.roleId) {
-        const roleModel = resource.contextType === 'organization' ? 'organizationRole' : 'teamRole'
         role = await ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: updated.roleId }],
         }).catch(() => null) as any
       }
@@ -689,7 +683,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'GET',
       query: z.object({
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
         status: z.string().optional(),
         limit: z.coerce.number().min(1).max(100).optional(),
@@ -745,11 +739,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
 
       // Fetch all roles in batch
-      const roleModel = contextType === 'organization' ? 'organizationRole' :
-                       contextType === 'team' ? 'teamRole' : 'teamRole'
       const rolesPromises = roleIds.map(roleId =>
         ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: roleId }],
         }).catch(() => null)
       )
@@ -827,28 +819,18 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const users = await Promise.all(usersPromises) as any[]
       const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
 
-      // Group invitations by contextType to optimize role fetching
-      const invitationsByContext = invitations.reduce((acc, inv) => {
-        if (!acc[inv.contextType]) acc[inv.contextType] = []
-        acc[inv.contextType]!.push(inv)
-        return acc
-      }, {} as Record<string, Invitation[]>)
-
-      // Fetch roles for each context type separately
+      // Fetch all roles in batch using unified model
+      const allRoleIds = [...new Set(invitations.map(i => i.roleId).filter(Boolean))] as string[]
       const roleMap = new Map()
-      for (const [contextType, contextInvitations] of Object.entries(invitationsByContext)) {
-        const contextRoleIds = [...new Set(contextInvitations.map(i => i.roleId).filter(Boolean))] as string[]
-        if (contextRoleIds.length > 0) {
-          const roleModel = contextType === 'organization' ? 'organizationRole' : 'teamRole'
-          const rolesPromises = contextRoleIds.map(roleId =>
-            ctx.context.adapter.findOne({
-              model: roleModel,
-              where: [{ field: 'id', value: roleId }],
-            }).catch(() => null)
-          )
-          const roles = await Promise.all(rolesPromises) as any[]
-          roles.filter(Boolean).forEach(r => roleMap.set(r.id, r))
-        }
+      if (allRoleIds.length > 0) {
+        const rolesPromises = allRoleIds.map(roleId =>
+          ctx.context.adapter.findOne({
+            model: 'role',
+            where: [{ field: 'id', value: roleId }],
+          }).catch(() => null)
+        )
+        const roles = await Promise.all(rolesPromises) as any[]
+        roles.filter(Boolean).forEach(r => roleMap.set(r.id, r))
       }
 
       // Enrich invitations with cached user and role data

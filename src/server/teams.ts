@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
+import type { Adapter } from 'better-auth'
 import type { Team } from '../schema'
 import type { TenancyConfig } from '../types'
 import { cleanupContextPermissions } from './permissions'
@@ -8,7 +9,8 @@ import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 export interface CreateTeamInput {
-  organizationId: string
+  parentType: 'organization' | 'team'
+  parentId: string
   name: string
   slug: string
   metadata?: Record<string, unknown>
@@ -20,13 +22,121 @@ export interface UpdateTeamInput {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * Compute the nesting depth of a team by walking up the parent chain.
+ * Returns 1 for a team directly under an organization, 2 for a team under a team, etc.
+ * Safety: max 100 iterations to avoid infinite loops from circular references.
+ */
+async function computeNestingDepth(
+  adapter: Adapter,
+  parentType: string,
+  parentId: string
+): Promise<number> {
+  let depth = 0
+  let currentType = parentType
+  let currentId = parentId
+
+  for (let i = 0; i < 100; i++) {
+    if (currentType === 'organization') {
+      depth++
+      break
+    }
+    // currentType === 'team', look up the parent team
+    const parentTeam = await adapter.findOne({
+      model: 'team',
+      where: [{ field: 'id', value: currentId }],
+    }) as Team | null
+    if (!parentTeam) break
+    depth++
+    currentType = parentTeam.parentType
+    currentId = parentTeam.parentId
+  }
+
+  return depth
+}
+
+/**
+ * Recursively delete a team and all its descendants.
+ * Depth-first: deletes child teams first, then the team itself.
+ */
+export async function deleteTeamRecursive(
+  adapter: Adapter,
+  teamId: string,
+  config?: TenancyConfig
+): Promise<{ teamsDeleted: number; grantsDeleted: number; deniesDeleted: number }> {
+  let teamsDeleted = 0
+  let grantsDeleted = 0
+  let deniesDeleted = 0
+
+  // 1. Find child teams
+  const childTeams = await adapter.findMany({
+    model: 'team',
+    where: [{ field: 'parentType', value: 'team' }, { field: 'parentId', value: teamId }],
+  }) as Team[]
+
+  // 2. Recurse into each child (depth-first)
+  for (const child of childTeams) {
+    const result = await deleteTeamRecursive(adapter, child.id, config)
+    teamsDeleted += result.teamsDeleted
+    grantsDeleted += result.grantsDeleted
+    deniesDeleted += result.deniesDeleted
+  }
+
+  // 3. Delete members for this team
+  await adapter.delete({
+    model: 'member',
+    where: [{ field: 'contextType', value: 'team' }, { field: 'contextId', value: teamId }],
+  })
+
+  // 4. Delete roles and their statements
+  const teamRoles = await adapter.findMany({
+    model: 'role',
+    where: [{ field: 'contextType', value: 'team' }, { field: 'contextId', value: teamId }],
+  }) as any[]
+
+  for (const role of teamRoles) {
+    await adapter.delete({
+      model: 'roleStatement',
+      where: [{ field: 'roleId', value: role.id }],
+    })
+    await adapter.delete({
+      model: 'role',
+      where: [{ field: 'id', value: role.id }],
+    })
+  }
+
+  // 5. Delete invitations
+  await adapter.delete({
+    model: 'invitation',
+    where: [
+      { field: 'contextType', value: 'team' },
+      { field: 'contextId', value: teamId },
+    ],
+  })
+
+  // 6. Delete permissions
+  const cleanup = await cleanupContextPermissions(adapter, 'team', teamId)
+  grantsDeleted += cleanup.grantsDeleted
+  deniesDeleted += cleanup.deniesDeleted
+
+  // 7. Delete the team itself
+  await adapter.delete({
+    model: 'team',
+    where: [{ field: 'id', value: teamId }],
+  })
+  teamsDeleted++
+
+  return { teamsDeleted, grantsDeleted, deniesDeleted }
+}
+
 export const teamEndpoints = (config?: TenancyConfig) => ({
   createTeam: createAuthEndpoint(
     '/tenancy/team/create',
     {
       method: 'POST',
       body: z.object({
-        organizationId: z.string(),
+        parentType: z.enum(['organization', 'team']),
+        parentId: z.string(),
         name: z.string().min(1).max(100),
         slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
         metadata: config?.schemas?.team?.metadata ?? z.record(z.unknown()).optional(),
@@ -34,7 +144,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'Create team',
-          description: 'Create a new team within an organization (requires authentication)',
+          description: 'Create a new team within an organization or another team (requires authentication)',
         },
       },
     },
@@ -44,12 +154,13 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
 
       await applyEndpointAuth(config?.endpoints?.team?.create, ctx, session)
 
-      const { organizationId, name, slug, metadata } = ctx.body
+      const { parentType, parentId, name, slug, metadata } = ctx.body
 
-      if (config?.limits?.maxTeamsPerOrganization) {
+      // Check limits based on parent type
+      if (parentType === 'organization' && config?.limits?.maxTeamsPerOrganization) {
         const allTeams = await ctx.context.adapter.findMany({
           model: 'team',
-          where: [{ field: 'organizationId', value: organizationId }],
+          where: [{ field: 'parentType', value: 'organization' }, { field: 'parentId', value: parentId }],
         }) as Team[]
         if (allTeams.length >= config.limits.maxTeamsPerOrganization) {
           const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
@@ -57,13 +168,36 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
             message: getErrorMessage('team.limit_reached', locale, { limit: config.limits.maxTeamsPerOrganization }, config?.i18n?.errorMessages),
           })
         }
+      } else if (parentType === 'team' && config?.limits?.maxChildTeamsPerTeam) {
+        const allChildren = await ctx.context.adapter.findMany({
+          model: 'team',
+          where: [{ field: 'parentType', value: 'team' }, { field: 'parentId', value: parentId }],
+        }) as Team[]
+        if (allChildren.length >= config.limits.maxChildTeamsPerTeam) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('team.limit_reached', locale, { limit: config.limits.maxChildTeamsPerTeam }, config?.i18n?.errorMessages),
+          })
+        }
       }
 
-      const teamsByOrg = await ctx.context.adapter.findMany({
+      // Check nesting depth limit
+      if (config?.limits?.maxNestingDepth) {
+        const depth = await computeNestingDepth(ctx.context.adapter, parentType, parentId)
+        if (depth >= config.limits.maxNestingDepth) {
+          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+          throw new APIError('BAD_REQUEST', {
+            message: getErrorMessage('team.nesting_depth_exceeded', locale, { limit: config.limits.maxNestingDepth }, config?.i18n?.errorMessages),
+          })
+        }
+      }
+
+      // Check slug uniqueness within the same parent
+      const siblings = await ctx.context.adapter.findMany({
         model: 'team',
-        where: [{ field: 'organizationId', value: organizationId }],
+        where: [{ field: 'parentType', value: parentType }, { field: 'parentId', value: parentId }],
       }) as Team[]
-      const existing = teamsByOrg.find((t) => t.slug === slug)
+      const existing = siblings.find((t) => t.slug === slug)
       if (existing) {
         const acceptLanguage = getLocaleFromHeaders(ctx.headers)
         throw new APIError('BAD_REQUEST', {
@@ -73,14 +207,14 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
 
       const team = await ctx.context.adapter.create({
         model: 'team',
-        data: { organizationId, name, slug, metadata },
+        data: { parentType, parentId, name, slug, metadata },
       }) as Team
 
       const eventData = {
         entityType: 'team' as const,
         entityId: team.id,
         entityName: team.name,
-        parentContext: { type: 'organization' as const, id: organizationId },
+        parentContext: { type: parentType as 'organization' | 'team', id: parentId },
         createdBy,
         metadata: team.metadata ?? undefined,
         timestamp: new Date(),
@@ -142,17 +276,18 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
   ),
 
   getTeamBySlug: createAuthEndpoint(
-    '/tenancy/team/:organizationId/by-slug/:slug',
+    '/tenancy/team/:parentType/:parentId/by-slug/:slug',
     {
       method: 'GET',
       params: z.object({
-        organizationId: z.string(),
+        parentType: z.enum(['organization', 'team']),
+        parentId: z.string(),
         slug: z.string(),
       }),
       metadata: {
         openapi: {
           summary: 'Get team by slug',
-          description: 'Get team by slug within organization',
+          description: 'Get team by slug within a parent context',
         },
       },
     },
@@ -160,10 +295,10 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       const session = await getSessionFromCtx(ctx)
       await applyEndpointAuth(config?.endpoints?.team?.read, ctx, session)
 
-      const { organizationId, slug } = ctx.params
+      const { parentType, parentId, slug } = ctx.params
       const teams = await ctx.context.adapter.findMany({
         model: 'team',
-        where: [{ field: 'organizationId', value: organizationId }],
+        where: [{ field: 'parentType', value: parentType }, { field: 'parentId', value: parentId }],
       }) as Team[]
       const team = teams.find((t) => t.slug === slug)
 
@@ -214,11 +349,11 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       }
 
       if (slug && slug !== current.slug) {
-        const teams = await ctx.context.adapter.findMany({
+        const siblings = await ctx.context.adapter.findMany({
           model: 'team',
-          where: [{ field: 'organizationId', value: current.organizationId }],
+          where: [{ field: 'parentType', value: current.parentType }, { field: 'parentId', value: current.parentId }],
         }) as Team[]
-        const existing = teams.find((t) => t.slug === slug && t.id !== id)
+        const existing = siblings.find((t) => t.slug === slug && t.id !== id)
         if (existing) {
           const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
           throw new APIError('BAD_REQUEST', {
@@ -262,7 +397,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'Delete team',
-          description: 'Delete team and all related entities (requires authentication)',
+          description: 'Delete team and all related entities recursively (requires authentication)',
         },
       },
     },
@@ -285,77 +420,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      // Cascade delete: Subteams and their members/invitations
-      const subteams = await ctx.context.adapter.findMany({
-        model: 'subteam',
-        where: [{ field: 'teamId', value: id }],
-      }) as any[]
-      for (const subteam of subteams) {
-        // Delete subteam members
-        await ctx.context.adapter.delete({
-          model: 'subteamMember',
-          where: [{ field: 'subteamId', value: subteam.id }],
-        })
-
-        // Delete subteam invitations
-        await ctx.context.adapter.delete({
-          model: 'invitation',
-          where: [
-            { field: 'contextType', value: 'subteam' },
-            { field: 'contextId', value: subteam.id },
-          ],
-        })
-
-        // Delete subteam permissions
-        await cleanupContextPermissions(ctx.context.adapter, 'subteam', subteam.id)
-
-        // Delete subteam
-        await ctx.context.adapter.delete({
-          model: 'subteam',
-          where: [{ field: 'id', value: subteam.id }],
-        })
-      }
-
-      // Delete team roles and their statements
-      const teamRoles = await ctx.context.adapter.findMany({
-        model: 'teamRole',
-        where: [{ field: 'teamId', value: id }],
-      }) as any[]
-
-      for (const role of teamRoles) {
-        await ctx.context.adapter.delete({
-          model: 'teamRoleStatement',
-          where: [{ field: 'roleId', value: role.id }],
-        })
-        await ctx.context.adapter.delete({
-          model: 'teamRole',
-          where: [{ field: 'id', value: role.id }],
-        })
-      }
-
-      // Delete team members
-      await ctx.context.adapter.delete({
-        model: 'teamMember',
-        where: [{ field: 'teamId', value: id }],
-      })
-
-      // Delete team invitations
-      await ctx.context.adapter.delete({
-        model: 'invitation',
-        where: [
-          { field: 'contextType', value: 'team' },
-          { field: 'contextId', value: id },
-        ],
-      })
-
-      // Delete team permissions
-      const cleanup = await cleanupContextPermissions(ctx.context.adapter, 'team', id)
-
-      // Finally delete the team
-      await ctx.context.adapter.delete({
-        model: 'team',
-        where: [{ field: 'id', value: id }],
-      })
+      const result = await deleteTeamRecursive(ctx.context.adapter, id, config)
 
       if (config?.audit?.onEntityDeleted) {
         await config.audit.onEntityDeleted({
@@ -364,10 +429,10 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
           entityName: team.name,
           deletedBy,
           metadata: {
-            subteamsDeleted: subteams.length,
+            teamsDeleted: result.teamsDeleted,
             permissionsDeleted: {
-              grants: cleanup.grantsDeleted,
-              denies: cleanup.deniesDeleted,
+              grants: result.grantsDeleted,
+              denies: result.deniesDeleted,
             },
           },
           timestamp: new Date(),
@@ -378,12 +443,13 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
-  listTeamsByOrganization: createAuthEndpoint(
+  listTeamsByParent: createAuthEndpoint(
     '/tenancy/team/list',
     {
       method: 'GET',
       query: z.object({
-        organizationId: z.string(),
+        parentType: z.enum(['organization', 'team']),
+        parentId: z.string(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
         orderBy: z.enum(['createdAt', 'name']).optional(),
@@ -392,7 +458,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List teams',
-          description: 'List all teams in an organization. When permission filtering is configured, returns all filtered items without pagination.',
+          description: 'List all teams under a parent. When permission filtering is configured, returns all filtered items without pagination.',
         },
       },
     },
@@ -400,9 +466,12 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       const session = await getSessionFromCtx(ctx)
       await applyEndpointAuth(config?.endpoints?.team?.list, ctx, session)
 
-      const { organizationId, limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
+      const { parentType, parentId, limit = 50, offset = 0, orderBy, orderDirection } = ctx.query
 
-      const where = [{ field: 'organizationId', value: organizationId }]
+      const where = [
+        { field: 'parentType', value: parentType },
+        { field: 'parentId', value: parentId },
+      ]
 
       // If no permission filtering, use efficient pagination
       if (!config?.permissionFiltering?.filterTeams) {
@@ -430,11 +499,10 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         sortBy: orderBy ? { field: orderBy, direction: orderDirection || 'asc' } : undefined,
       }) as Team[]
 
-      items = await config.permissionFiltering.filterTeams(ctx, items, { organizationId })
+      items = await config.permissionFiltering.filterTeams(ctx, items, { parentType, parentId })
       const total = items.length
 
       return ctx.json({ items, total })
     }
   ),
 })
-

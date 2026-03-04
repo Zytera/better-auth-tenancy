@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { OrganizationRole, TeamRole } from '../schema'
+import type { Role } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import type { StatementId } from '../types'
 import { applyEndpointAuth, requireSession } from './middleware'
@@ -9,38 +9,23 @@ import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 
 /**
- * Find role and determine its context (organization or team)
- * This helper is used to enrich endpoint hooks with resource context
+ * Find role and determine its context
+ * Single query to the unified role model
  */
 export async function findRoleContext(
   adapter: Adapter,
   roleId: string
 ): Promise<ResourceContext | null> {
-  // Try organizationRole
-  const orgRole = await adapter.findOne({
-    model: 'organizationRole',
+  const role = await adapter.findOne({
+    model: 'role',
     where: [{ field: 'id', value: roleId }],
-  }).catch(() => null) as OrganizationRole | null
+  }).catch(() => null) as Role | null
 
-  if (orgRole) {
+  if (role) {
     return {
-      contextType: 'organization',
-      contextId: orgRole.organizationId,
-      data: orgRole,
-    }
-  }
-
-  // Try teamRole
-  const teamRole = await adapter.findOne({
-    model: 'teamRole',
-    where: [{ field: 'id', value: roleId }],
-  }).catch(() => null) as TeamRole | null
-
-  if (teamRole) {
-    return {
-      contextType: 'team',
-      contextId: teamRole.teamId,
-      data: teamRole,
+      contextType: role.contextType as 'organization' | 'team',
+      contextId: role.contextId,
+      data: role,
     }
   }
 
@@ -91,12 +76,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         ? config?.limits?.maxRolesPerOrganization
         : config?.limits?.maxRolesPerTeam
       if (maxRoles) {
-        const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
-        const field = contextType === 'organization' ? 'organizationId' : 'teamId'
         const allRoles = await ctx.context.adapter.findMany({
-          model,
-          where: [{ field, value: contextId }],
-        }) as (OrganizationRole | TeamRole)[]
+          model: 'role',
+          where: [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }],
+        }) as Role[]
         if (allRoles.length >= maxRoles) {
           const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
           throw new APIError('BAD_REQUEST', {
@@ -105,71 +88,38 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         }
       }
 
-      let role: OrganizationRole | TeamRole
+      // Check for duplicate name
+      const existingRoles = await ctx.context.adapter.findMany({
+        model: 'role',
+        where: [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }],
+      }) as Role[]
+      if (existingRoles.find((r: Role) => r.name === name)) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('BAD_REQUEST', {
+          message: getErrorMessage('role.already_exists', locale, { name }, config?.i18n?.errorMessages),
+        })
+      }
 
-      if (contextType === 'organization') {
-        const orgRoles = await ctx.context.adapter.findMany({
-          model: 'organizationRole',
-          where: [{ field: 'organizationId', value: contextId }],
-        }) as OrganizationRole[]
-        if (orgRoles.find((r: OrganizationRole) => r.name === name)) {
-          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-          throw new APIError('BAD_REQUEST', {
-            message: getErrorMessage('role.already_exists', locale, { name }, config?.i18n?.errorMessages),
+      const role = await ctx.context.adapter.create({
+        model: 'role',
+        data: {
+          contextType,
+          contextId,
+          name,
+          description,
+        },
+      }) as Role
+
+      // Add statements
+      if (statements) {
+        for (const sid of statements) {
+          await ctx.context.adapter.create({
+            model: 'roleStatement',
+            data: {
+              roleId: role.id,
+              statementId: sid,
+            },
           })
-        }
-        role = await ctx.context.adapter.create({
-          model: 'organizationRole',
-          data: {
-            organizationId: contextId,
-            name,
-            description,
-          },
-        }) as OrganizationRole
-
-        // Add statements
-        if (statements) {
-          for (const sid of statements) {
-            await ctx.context.adapter.create({
-              model: 'organizationRoleStatement',
-              data: {
-                roleId: role.id,
-                statementId: sid,
-              },
-            })
-          }
-        }
-      } else {
-        const teamRoles = await ctx.context.adapter.findMany({
-          model: 'teamRole',
-          where: [{ field: 'teamId', value: contextId }],
-        }) as TeamRole[]
-        if (teamRoles.find((r: TeamRole) => r.name === name)) {
-          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-          throw new APIError('BAD_REQUEST', {
-            message: getErrorMessage('role.already_exists', locale, { name }, config?.i18n?.errorMessages),
-          })
-        }
-        role = await ctx.context.adapter.create({
-          model: 'teamRole',
-          data: {
-            teamId: contextId,
-            name,
-            description,
-          },
-        }) as TeamRole
-
-        // Add statements
-        if (statements) {
-          for (const sid of statements) {
-            await ctx.context.adapter.create({
-              model: 'teamRoleStatement',
-              data: {
-                roleId: role.id,
-                statementId: sid,
-              },
-            })
-          }
         }
       }
 
@@ -220,13 +170,11 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      const role = resource.data as OrganizationRole | TeamRole
-      const isOrgRole = resource.contextType === 'organization'
-      const relationModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
+      const role = resource.data as Role
 
       // Fetch role-statement relations
       const roleStatements = await ctx.context.adapter.findMany({
-        model: relationModel,
+        model: 'roleStatement',
         where: [{ field: 'roleId', value: role.id }],
       }) as any[]
 
@@ -325,17 +273,16 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      const current = resource.data as OrganizationRole | TeamRole
-      const isOrgRole = resource.contextType === 'organization'
+      const current = resource.data as Role
 
       const updated = await ctx.context.adapter.update({
-        model: isOrgRole ? 'organizationRole' : 'teamRole',
+        model: 'role',
         where: [{ field: 'id', value: id }],
         update: {
           name,
           description,
         },
-      }) as OrganizationRole | TeamRole
+      }) as Role
 
       if (config?.audit?.onEntityUpdated) {
         const changes: Record<string, { old: unknown; new: unknown }> = {}
@@ -390,13 +337,11 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      const role = resource.data as OrganizationRole | TeamRole
-      const isOrgRole = resource.contextType === 'organization'
+      const role = resource.data as Role
 
       // Check if role is assigned to any members
-      const memberModel = isOrgRole ? 'organizationMember' : 'teamMember'
       const members = await ctx.context.adapter.findMany({
-        model: memberModel,
+        model: 'member',
         where: [{ field: 'roleId', value: id }],
       }) as any[]
 
@@ -412,36 +357,15 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      // Also check subteam members if it's a team role
-      if (!isOrgRole) {
-        const subteamMembers = await ctx.context.adapter.findMany({
-          model: 'subteamMember',
-          where: [{ field: 'roleId', value: id }],
-        }) as any[]
-
-        if (subteamMembers.length > 0) {
-          const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-          throw new APIError('BAD_REQUEST', {
-            message: getErrorMessage(
-              'role.delete.in_use_subteam_members',
-              locale,
-              { count: subteamMembers.length },
-              config?.i18n?.errorMessages
-            ),
-          })
-        }
-      }
-
       // Delete role statements
-      const statementModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
       await ctx.context.adapter.delete({
-        model: statementModel,
+        model: 'roleStatement',
         where: [{ field: 'roleId', value: id }],
       })
 
       // Delete the role
       await ctx.context.adapter.delete({
-        model: isOrgRole ? 'organizationRole' : 'teamRole',
+        model: 'role',
         where: [{ field: 'id', value: id }],
       })
 
@@ -483,35 +407,29 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const { contextType, contextId, limit = 50, offset = 0, includeStatements = false } = ctx.query
 
-      const model = contextType === 'organization' ? 'organizationRole' : 'teamRole'
-      const field = contextType === 'organization' ? 'organizationId' : 'teamId'
-
-      const where = [{ field, value: contextId }]
+      const where = [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }]
 
       // Execute findMany and count in parallel for better performance
       const [items, total] = await Promise.all([
         ctx.context.adapter.findMany({
-          model,
+          model: 'role',
           where,
           limit,
           offset,
-        }) as Promise<(OrganizationRole | TeamRole)[]>,
+        }) as Promise<Role[]>,
         ctx.context.adapter.count({
-          model,
+          model: 'role',
           where,
         })
       ])
 
       // Conditionally enrich roles with their statements
       if (includeStatements) {
-        const isOrgRole = contextType === 'organization'
-        const relationModel = isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement'
-
         // Batch fetch all role-statement relations for all roles
         const roleIds = items.map(r => r.id)
         const allRoleStatementsPromises = roleIds.map(roleId =>
           ctx.context.adapter.findMany({
-            model: relationModel,
+            model: 'roleStatement',
             where: [{ field: 'roleId', value: roleId }],
           }).catch(() => [])
         )
@@ -636,11 +554,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      const role = resource.data as OrganizationRole | TeamRole
-      const isOrgRole = resource.contextType === 'organization'
+      const role = resource.data as Role
 
       await ctx.context.adapter.create({
-        model: isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement',
+        model: 'roleStatement',
         data: {
           roleId: id,
           statementId,
@@ -697,11 +614,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         resource,
       }, session)
 
-      const role = resource.data as OrganizationRole | TeamRole
-      const isOrgRole = resource.contextType === 'organization'
+      const role = resource.data as Role
 
       await ctx.context.adapter.delete({
-        model: isOrgRole ? 'organizationRoleStatement' : 'teamRoleStatement',
+        model: 'roleStatement',
         where: [
           { field: 'roleId', value: id },
           { field: 'statementId', value: statementId },
@@ -724,4 +640,3 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 })
-

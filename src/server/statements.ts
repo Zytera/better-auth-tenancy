@@ -235,18 +235,12 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Check if statement is used in role statements
-      const [orgRoleStatements, teamRoleStatements] = await Promise.all([
-        ctx.context.adapter.findMany({
-          model: 'organizationRoleStatement',
-          where: [{ field: 'statementId', value: id }],
-        }) as Promise<any[]>,
-        ctx.context.adapter.findMany({
-          model: 'teamRoleStatement',
-          where: [{ field: 'statementId', value: id }],
-        }) as Promise<any[]>
-      ])
+      const roleStatementsInUse = await ctx.context.adapter.findMany({
+        model: 'roleStatement',
+        where: [{ field: 'statementId', value: id }],
+      }) as any[]
 
-      const roleStatementsCount = orgRoleStatements.length + teamRoleStatements.length
+      const roleStatementsCount = roleStatementsInUse.length
       if (roleStatementsCount > 0) {
         const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
         throw new APIError('BAD_REQUEST', {

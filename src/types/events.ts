@@ -11,7 +11,7 @@ export interface BaseEvent {
 /**
  * Entity types that can be created/deleted
  */
-export type EntityType = 'organization' | 'team' | 'subteam' | 'role' | 'statement' | 'member'
+export type EntityType = 'organization' | 'team' | 'role' | 'statement' | 'member'
 
 /**
  * Role Changed Event
@@ -67,7 +67,7 @@ export interface PermissionRevokedEvent extends BaseEvent {
 
 /**
  * Entity Created Event
- * Fired when any entity is created (organization, team, subteam, role, statement, etc.)
+ * Fired when any entity is created (organization, team, role, statement, etc.)
  */
 export interface EntityCreatedEvent extends BaseEvent {
   entityType: EntityType
@@ -112,7 +112,7 @@ export interface EntityDeletedEvent extends BaseEvent {
 
 /**
  * Member Added Event
- * Fired when a user is added to a context (organization, team, or subteam)
+ * Fired when a user is added to a context (organization or team)
  */
 export interface MemberAddedEvent extends BaseEvent {
   userId: string
@@ -268,14 +268,14 @@ export type AuditEvent =
  */
 export interface ActionHooks {
   /**
-   * Called AFTER creating an entity (organization, team, subteam) in the database
+   * Called AFTER creating an entity (organization, team) in the database
    * If this hook throws, the entity will be deleted (automatic rollback)
    * Use this for creating default roles, setting up initial permissions, etc.
    */
   onEntityCreated?: (event: EntityCreatedEvent, ctx: any) => Promise<void> | void
 
   /**
-   * Called AFTER adding a member to a context (organization, team, subteam)
+   * Called AFTER adding a member to a context (organization or team)
    * If this hook throws, the member will be removed (automatic rollback)
    * Use this for granting default permissions, sending notifications, etc.
    */

@@ -8,7 +8,7 @@ import { generateId } from 'better-auth'
  */
 export const statementSchema = z.object({
   id: z.string(), // Format: "category:operation"
-  category: z.string(), // e.g., "team", "member", "subteam"
+  category: z.string(), // e.g., "team", "member", "organization"
   operation: z.string(), // e.g., "create", "read", "update", "delete"
   createdAt: z.date().default(() => new Date()),
 })

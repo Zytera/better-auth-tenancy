@@ -31,7 +31,6 @@ export type {
   ContextWithMetadata,
   OrganizationContext,
   TeamContext,
-  SubteamContext,
   TypedContext,
   ContextResolution,
   ContextValidation,

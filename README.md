@@ -2,7 +2,7 @@
 
 > Database-agnostic hierarchical permission system for Better Auth with RBAC, statement-level control, and organization management.
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
@@ -15,13 +15,13 @@
 - [Client Usage](#client-usage)
 - [Examples](#examples)
 
-## 🌟 Overview
+## Overview
 
 Better Auth Tenancy is a production-ready Better Auth plugin that provides enterprise-grade hierarchical permission management. It implements a hybrid RBAC model combining role-based access control with statement-level granular permissions, similar to Google Cloud IAM.
 
 ### Key Features
 
-- **Three-level hierarchy**: Organizations → Teams → Subteams
+- **Unlimited nesting hierarchy**: Organizations → Teams → Teams → ... (no depth limit)
 - **Dynamic roles**: Create custom roles at runtime without code changes
 - **Statement-based permissions**: Fine-grained permissions like `team:create`, `member:add`
 - **Explicit grants/denies**: Override role permissions at user level (deny-first policy)
@@ -33,29 +33,30 @@ Better Auth Tenancy is a production-ready Better Auth plugin that provides enter
 - **Audit hooks**: Track all permission and entity changes (logging/monitoring only)
 - **Cache integration**: Configurable caching for high performance
 - **Database-agnostic**: Works with any Better Auth database adapter
-- **Universal client**: Single import works seamlessly in web and React Native/Expo (~70 lines, 85% smaller)
+- **Universal client**: Single import works seamlessly in web and React Native/Expo
 - **Permission filtering hooks**: Filter resources based on user permissions (organizations, teams, members)
 - **Type-safe API**: Full TypeScript support with automatic endpoint inference
-- **55+ REST endpoints**: Complete API out of the box
 
-## ✨ Features
+## Features
 
-### 🏢 Hierarchical Organizations
+### Hierarchical Organizations
 
 ```
 Organization (Root)
     ├── Team A
-    │   ├── Subteam A1
-    │   └── Subteam A2
+    │   ├── Team A1 (child of A)
+    │   │   └── Team A1a (child of A1)
+    │   └── Team A2 (child of A)
     └── Team B
-        └── Subteam B1
+        └── Team B1 (child of B)
 ```
 
 - Unlimited organizations per installation
-- Configurable hierarchy limits (teams per org, subteams per team)
+- Unlimited nesting depth (configurable via `maxNestingDepth`)
+- Configurable limits (teams per org, child teams per team)
 - Members can belong to multiple contexts with different roles
 
-### 🔐 Hybrid RBAC Model
+### Hybrid RBAC Model
 
 **Three permission layers:**
 
@@ -72,14 +73,14 @@ Organization (Root)
 4. DEFAULT (no permission)
 ```
 
-### 🎯 Statement-Level Control
+### Statement-Level Control
 
 Define granular permissions:
 
 ```typescript
 // Define statements
 await authClient.tenancy.statement.create({
-  id: 'subteam:delete',
+  id: 'team:delete',
 })
 
 // Create role with statements
@@ -87,11 +88,11 @@ await authClient.tenancy.role.create({
   name: 'Team Manager',
   contextType: 'team',
   contextId: teamId,
-  statements: ['subteam:create', 'subteam:delete', 'member:add'],
+  statements: ['team:create', 'team:delete', 'member:add'],
 })
 ```
 
-### ⏰ Temporary Permissions
+### Temporary Permissions
 
 Grant time-limited access:
 
@@ -105,7 +106,7 @@ await authClient.tenancy.permission.grant({
 })
 ```
 
-### 📧 Invitation System
+### Invitation System
 
 Built-in invitation workflow:
 
@@ -123,7 +124,7 @@ await authClient.tenancy.invitation.accept({
 })
 ```
 
-### 🌍 Internationalization (i18n)
+### Internationalization (i18n)
 
 Full multi-language support with automatic locale detection and error messages:
 
@@ -179,8 +180,7 @@ tenancy({
 - Statement errors: `statement.not_found`, `statement.already_exists`, `statement.delete.in_use_roles`
 - Member errors: `member.not_found`, `member.limit_reached`
 - Organization errors: `organization.not_found`, `organization.slug_exists`
-- Team errors: `team.not_found`, `team.slug_exists`, `team.limit_reached`
-- Subteam errors: `subteam.not_found`, `subteam.slug_exists`, `subteam.limit_reached`
+- Team errors: `team.not_found`, `team.slug_exists`, `team.limit_reached`, `team.nesting_depth_exceeded`
 - Invitation errors: `invitation.not_found`, `invitation.expired`, `invitation.already_accepted`
 
 **How it works:**
@@ -209,15 +209,15 @@ throw new APIError('BAD_REQUEST', {
 // Result: "Cannot delete role assigned to 5 member(s)"
 ```
 
-### 📋 Metadata Validation
+### Metadata Validation
 
-All entities (organizations, teams, subteams, members, invitations) include an optional `metadata` field that accepts any JSON data. You can define custom Zod schemas to validate metadata fields, and Better Auth will automatically validate them on create/update operations.
+All entities (organizations, teams, members, invitations) include an optional `metadata` field that accepts any JSON data. You can define custom Zod schemas to validate metadata fields, and Better Auth will automatically validate them on create/update operations.
 
 **Why use metadata validation?**
-- ✅ Enforce required custom fields (e.g., `country`, `department`)
-- ✅ Type-safe metadata with automatic TypeScript inference
-- ✅ Native Better Auth validation (no manual checks needed)
-- ✅ Consistent API error messages for invalid data
+- Enforce required custom fields (e.g., `country`, `department`)
+- Type-safe metadata with automatic TypeScript inference
+- Native Better Auth validation (no manual checks needed)
+- Consistent API error messages for invalid data
 
 **Server configuration:**
 
@@ -239,12 +239,6 @@ tenancy({
         budget: z.number().optional()
       })
     },
-    subteam: {
-      metadata: z.object({
-        location: z.string(),
-        capacity: z.number().optional()
-      })
-    },
     member: {
       metadata: z.object({
         startDate: z.string(),
@@ -264,7 +258,7 @@ tenancy({
 **Usage example:**
 
 ```typescript
-// ✅ Valid - includes required fields
+// Valid - includes required fields
 await authClient.tenancy.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
@@ -275,7 +269,7 @@ await authClient.tenancy.organization.create({
   }
 })
 
-// ❌ Invalid - missing required 'country' field
+// Invalid - missing required 'country' field
 await authClient.tenancy.organization.create({
   name: 'Acme Corp',
   slug: 'acme-corp',
@@ -284,7 +278,7 @@ await authClient.tenancy.organization.create({
   }
 })
 
-// ✅ Valid - metadata is optional
+// Valid - metadata is optional
 await authClient.tenancy.organization.create({
   name: 'Simple Org',
   slug: 'simple-org'
@@ -298,28 +292,7 @@ await authClient.tenancy.organization.create({
 3. Invalid data returns a validation error before hitting the database
 4. If no custom schema is provided, metadata accepts any JSON (`Record<string, unknown>`)
 
-**TypeScript type safety:**
-
-```typescript
-// Define your metadata type
-interface OrgMetadata {
-  country: string
-  industry?: string
-  employeeCount?: number
-}
-
-// Use with type assertion
-const org = await authClient.tenancy.organization.create({
-  name: 'Acme Corp',
-  slug: 'acme-corp',
-  metadata: {
-    country: 'ES',
-    industry: 'Tech'
-  } as OrgMetadata
-})
-```
-
-### 🔍 Permission Filtering Hooks
+### Permission Filtering Hooks
 
 Filter resources based on user permissions:
 
@@ -334,15 +307,21 @@ tenancy({
       )
     },
 
-    // Filter teams by organization context
-    filterTeams: async (userId, teams, { organizationId }) => {
+    // Filter teams by parent context
+    filterTeams: async (ctx, teams, { parentType, parentId }) => {
       return teams.filter(team =>
         await hasPermission(userId, 'team:view', 'team', team.id)
       )
     },
 
     // Filter members by context
-    filterOrganizationMembers: async (userId, members, { organizationId }) => {
+    filterOrganizationMembers: async (ctx, members, { organizationId }) => {
+      // Custom filtering logic
+      return members
+    },
+
+    // Filter team members
+    filterTeamMembers: async (ctx, members, { teamId, parentType, parentId }) => {
       // Custom filtering logic
       return members
     }
@@ -350,37 +329,45 @@ tenancy({
 })
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ### Permission Evaluation Flow
 
 ```
 User requests action
-    ↓
+    |
 1. Check explicit DENY
-    ├─ Found → DENY ❌
-    └─ Not found → Continue
-    ↓
+    |-- Found -> DENY
+    |-- Not found -> Continue
+    |
 2. Check explicit GRANT
-    ├─ Found → ALLOW ✅
-    └─ Not found → Continue
-    ↓
+    |-- Found -> ALLOW
+    |-- Not found -> Continue
+    |
 3. Check ROLE statements
-    ├─ Found in role → ALLOW ✅
-    └─ Not found → DENY ❌
+    |-- Found in role -> ALLOW
+    |-- Not found -> Continue
+    |
+4. Walk up hierarchy (team -> parent team -> ... -> organization)
+    |-- Repeat steps 1-3 at each level
+    |-- Found -> Return result
+    |-- Reached organization with no match -> DENY
 ```
 
 ### Hierarchy Precedence
 
-When checking permissions, the system follows the **most specific role** principle:
+When checking permissions, the system walks up the hierarchy from the most specific context to the organization root:
 
-1. **Subteam role** (most specific)
-2. **Team role** (parent context)
-3. **Organization role** (root context)
+1. **Current team** (most specific)
+2. **Parent team** (if parent is a team)
+3. **Grandparent team**, etc. (unlimited depth)
+4. **Organization** (root context)
 
-Example: User is `admin` of Team "Engineering" but `member` of Subteam "DevOps":
-- In Subteam "DevOps": Has `member` permissions only
-- In other subteams: Inherits `admin` permissions from Team
+Permissions are evaluated at each level following the Deny > Grant > Role priority. The first match wins.
+
+Example: User is `admin` of Team "Engineering" but `viewer` of child Team "DevOps":
+- In Team "DevOps": Has `viewer` permissions only
+- In other child teams of "Engineering": Inherits `admin` permissions
 
 ### Database Design
 
@@ -391,14 +378,35 @@ Uses Better Auth's native schema system:
 export const auth = betterAuth({
   database: yourAdapter, // Prisma, Drizzle, Kysely, MongoDB, etc.
   plugins: [
-    tenancy()  // Automatically creates 15 tables
+    tenancy()  // Automatically creates tables
   ]
 })
 ```
 
 Better Auth handles table creation automatically - no manual migrations needed.
 
-## 📦 Installation
+### Field Naming: `parentType`/`parentId` vs `contextType`/`contextId`
+
+The codebase uses two different polymorphic field pairs intentionally. They represent different relationships:
+
+| Fields | Used by | Meaning |
+|--------|---------|---------|
+| `contextType`/`contextId` | member, role, permissionGrant, permissionDeny, invitation | "This entity **belongs to** / **operates within** this context" |
+| `parentType`/`parentId` | team | "This entity **is a child of** this parent" |
+
+**Why not unify them?** The team's relationship to its parent is **hierarchical** (parent-child), while all other models have a **scoping** relationship (the entity exists within a context). Using `parentType`/`parentId` for teams makes the hierarchical nature explicit:
+
+```typescript
+// Immediately clear: this team's parent is the organization
+team.create({ parentType: 'organization', parentId: orgId })
+
+// Immediately clear: this member belongs to the organization context
+member.add({ contextType: 'organization', contextId: orgId })
+```
+
+The distinction also avoids ambiguity in the `team` model, where `contextType`/`contextId` could be misread as "the context this team represents" rather than "the context this team lives under".
+
+## Installation
 
 ```bash
 bun add @zytera/better-auth-tenancy better-auth
@@ -438,12 +446,12 @@ import type { Organization, Statement, Team } from '@zytera/better-auth-tenancy'
 ### Platform Support
 
 Works everywhere JavaScript runs:
-- ✅ **Web**: Astro, Next.js, SvelteKit, Remix, Vite, vanilla JS
-- ✅ **Mobile**: React Native, Expo (with @better-auth/expo)
-- ✅ **Server**: Bun (recommended), Node.js, Deno
-- ✅ **Edge**: Cloudflare Workers, Vercel Edge, Deno Deploy
+- **Web**: Astro, Next.js, SvelteKit, Remix, Vite, vanilla JS
+- **Mobile**: React Native, Expo (with @better-auth/expo)
+- **Server**: Bun (recommended), Node.js, Deno
+- **Edge**: Cloudflare Workers, Vercel Edge, Deno Deploy
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Configure Better Auth (Server)
 
@@ -482,10 +490,11 @@ export const auth = betterAuth({
             data: { email: event.identifier }
           })
           await adapter.create({
-            model: `${event.contextType}Member`,
+            model: 'member',
             data: {
               userId: user.id,
-              [`${event.contextType}Id`]: event.contextId,
+              contextType: event.contextType,
+              contextId: event.contextId,
               roleId: event.roleId
             }
           })
@@ -517,7 +526,18 @@ export const auth = betterAuth({
       // Optional: Hierarchy limits
       limits: {
         maxTeamsPerOrganization: 100,
+        maxChildTeamsPerTeam: 50,
         maxMembersPerOrganization: 10000,
+
+        // maxNestingDepth controls how deep teams can nest.
+        // The value represents the total hierarchy levels (org counts as 1):
+        //
+        //   maxNestingDepth: 2  ->  org -> team (only)
+        //   maxNestingDepth: 3  ->  org -> team -> subteam
+        //   maxNestingDepth: 4  ->  org -> team -> subteam -> sub-subteam
+        //   undefined           ->  unlimited nesting
+        //
+        maxNestingDepth: 3, // Classic 3-tier: org -> team -> subteam
       },
 
       // Optional: Invitation settings
@@ -551,12 +571,6 @@ export const auth = betterAuth({
           metadata: z.object({
             department: z.string(),
             budget: z.number().optional()
-          })
-        },
-        subteam: {
-          metadata: z.object({
-            location: z.string(),
-            capacity: z.number().optional()
           })
         },
         member: {
@@ -616,7 +630,7 @@ export const authClient = createAuthClient({
 
 ### 3. Database Tables
 
-Better Auth automatically creates 15 tables with the `auth_tenancy_*` prefix on first run. No manual migrations needed.
+Better Auth automatically creates tables on first run. No manual migrations needed.
 
 ### 4. Create Your First Organization
 
@@ -648,7 +662,7 @@ await authClient.tenancy.member.add({
 })
 ```
 
-## 📚 Core Concepts
+## Core Concepts
 
 ### Statements
 
@@ -668,9 +682,6 @@ Statements are the atomic units of permission. They represent a single action on
 await authClient.tenancy.statement.create({
   id: 'document:publish',
 })
-
-// Add translations for i18n (endpoint to be added in future versions)
-// Translations can be added directly to the database for now
 ```
 
 ### Roles
@@ -679,7 +690,7 @@ Roles are collections of statements that can be assigned to users.
 
 **Two types**:
 1. **Organization roles**: Apply to organization context
-2. **Team roles**: Apply to team/subteam contexts (custom per team)
+2. **Team roles**: Apply to team context (custom per team, at any nesting level)
 
 **Creating roles**:
 
@@ -697,7 +708,7 @@ await authClient.tenancy.role.create({
   ],
 })
 
-// Team custom role
+// Team custom role (works at any nesting level)
 await authClient.tenancy.role.create({
   name: 'Content Editor',
   description: 'Can edit and publish content',
@@ -708,6 +719,36 @@ await authClient.tenancy.role.create({
     'content:edit',
     'content:publish',
   ],
+})
+```
+
+### Teams (Unlimited Nesting)
+
+Teams use `parentType`/`parentId` to reference their parent, enabling unlimited nesting:
+
+```typescript
+// Top-level team (parent is an organization)
+const engineering = await authClient.tenancy.team.create({
+  parentType: 'organization',
+  parentId: org.id,
+  name: 'Engineering',
+  slug: 'engineering',
+})
+
+// Nested team (parent is another team)
+const frontend = await authClient.tenancy.team.create({
+  parentType: 'team',
+  parentId: engineering.id,
+  name: 'Frontend',
+  slug: 'frontend',
+})
+
+// Deeply nested team (parent is also a team)
+const react = await authClient.tenancy.team.create({
+  parentType: 'team',
+  parentId: frontend.id,
+  name: 'React',
+  slug: 'react',
 })
 ```
 
@@ -751,6 +792,8 @@ if (result.allowed) {
 }
 ```
 
+The permission check automatically walks up the hierarchy (team -> parent team -> ... -> organization) if no explicit permission is found at the current level.
+
 ### Grants and Denies
 
 Override role-based permissions:
@@ -772,7 +815,7 @@ await authClient.tenancy.permission.deny({
 })
 ```
 
-## 🔌 API Reference
+## API Reference
 
 ### Client Methods
 
@@ -787,20 +830,13 @@ authClient.tenancy.organization.update({ id, name?, slug?, metadata? })
 authClient.tenancy.organization.delete({ id })
 authClient.tenancy.organization.list({ limit?, offset?, orderBy?, orderDirection? })
 
-// Teams
-authClient.tenancy.team.create({ organizationId, name, slug, metadata? })
+// Teams (unlimited nesting via parentType/parentId)
+authClient.tenancy.team.create({ parentType, parentId, name, slug, metadata? })
 authClient.tenancy.team.get({ id })
-authClient.tenancy.team.getBySlug({ organizationId, slug })
+authClient.tenancy.team.getBySlug({ parentType, parentId, slug })
 authClient.tenancy.team.update({ id, name?, slug?, metadata? })
 authClient.tenancy.team.delete({ id })
-authClient.tenancy.team.list({ organizationId, limit?, offset?, orderBy?, orderDirection? })
-
-// Subteams
-authClient.tenancy.subteam.create({ teamId, name, slug, metadata? })
-authClient.tenancy.subteam.get({ id })
-authClient.tenancy.subteam.update({ id, name?, slug?, metadata? })
-authClient.tenancy.subteam.delete({ id })
-authClient.tenancy.subteam.list({ teamId, limit?, offset?, orderBy?, orderDirection? })
+authClient.tenancy.team.list({ parentType, parentId, limit?, offset?, orderBy?, orderDirection? })
 
 // Statements (createdBy is automatically set from authenticated user)
 authClient.tenancy.statement.create({ id })
@@ -859,30 +895,25 @@ All endpoints follow Better Auth conventions:
 - **Parameters**: IDs and data in request body for POST, query params for GET
 - **Authentication**: Session-based via cookies or Bearer tokens
 
-## 🗄️ Database Schema
+## Database Schema
 
-Better Auth Tenancy uses 15 tables:
+Better Auth Tenancy uses a unified model design:
 
 ### Core Tables
 - `organization` - Root entities
-- `team` - First-level grouping
-- `subteam` - Second-level grouping
+- `team` - Hierarchical grouping (unlimited nesting via `parentType`/`parentId`)
 
 ### Permission Tables
 - `statement` - Permission catalog
 - `statementTranslation` - i18n support
-- `organizationRole` - Organization roles
-- `organizationRoleStatement` - Role-statement mapping
-- `teamRole` - Team roles
-- `teamRoleStatement` - Role-statement mapping
+- `role` - Unified roles (organization and team roles in one table)
+- `roleStatement` - Role-statement mapping
 
 ### Member Tables
-- `organizationMember` - Organization members
-- `teamMember` - Team members
-- `subteamMember` - Subteam members
+- `member` - Unified members (organization and team members in one table)
 
 ### Permission Override Tables
-- `permissionGrant` - Explicit grants
+- `permissionGrant` - Explicit grants (with optional expiration)
 - `permissionDeny` - Explicit denies
 
 ### Utility Tables
@@ -890,7 +921,7 @@ Better Auth Tenancy uses 15 tables:
 
 Better Auth automatically creates these tables on first run.
 
-## 💻 Client Usage
+## Client Usage
 
 ### Universal Client with Automatic Type Inference
 
@@ -900,7 +931,7 @@ The plugin provides a **universal client** that uses `$InferServerPlugin` to aut
 import { tenancyClient } from '@zytera/better-auth-tenancy/client'
 ```
 
-#### 🌐 Web/Browser
+#### Web/Browser
 
 ```typescript
 import { createAuthClient } from 'better-auth/react'
@@ -923,13 +954,12 @@ await authClient.tenancy.organization.create({
 ```
 
 **Features:**
-- ✅ Automatic type inference from server plugin
-- ✅ ~85% smaller client code (~80 lines vs ~400 lines)
-- ✅ Accept-Language header support for i18n
-- ✅ Full TypeScript autocomplete
-- ✅ Works in all modern browsers
+- Automatic type inference from server plugin
+- Accept-Language header support for i18n
+- Full TypeScript autocomplete
+- Works in all modern browsers
 
-#### 📱 React Native/Expo
+#### React Native/Expo
 
 ```typescript
 import { createAuthClient } from 'better-auth/react'
@@ -946,17 +976,18 @@ const authClient = createAuthClient({
 
 // Same API as web!
 await authClient.tenancy.team.create({
-  organizationId: 'org-id',
+  parentType: 'organization',
+  parentId: 'org-id',
   name: 'My Team',
   slug: 'my-team'
 })
 ```
 
 **Features:**
-- ✅ Works with @better-auth/expo
-- ✅ SecureStore integration via expoClient
-- ✅ Automatic type inference
-- ✅ Accept-Language header support
+- Works with @better-auth/expo
+- SecureStore integration via expoClient
+- Automatic type inference
+- Accept-Language header support
 
 ### Configuration Options
 
@@ -979,7 +1010,7 @@ The client uses `getActions` to provide a clean, RESTful API structure. All meth
 - Members: `authClient.tenancy.member.add()`, `.get()`, `.list()`
 - Permissions: `authClient.tenancy.permission.grant()`, `.deny()`, `.check()`
 
-## 📖 Examples
+## Examples
 
 ### Example 1: Multi-tenant SaaS Application
 
@@ -992,26 +1023,23 @@ const org = await authClient.tenancy.organization.create({
 
 // Create departments as teams
 const engineering = await authClient.tenancy.team.create({
-  organizationId: org.id,
+  parentType: 'organization',
+  parentId: org.id,
   name: 'Engineering',
   slug: 'engineering',
 })
 
-// Create sub-teams
-const frontend = await authClient.tenancy.subteam.create({
-  teamId: engineering.id,
+// Create nested teams (unlimited depth)
+const frontend = await authClient.tenancy.team.create({
+  parentType: 'team',
+  parentId: engineering.id,
   name: 'Frontend',
   slug: 'frontend',
 })
 
 // Define permissions
-await authClient.tenancy.statement.create({
-  id: 'code:commit',
-})
-
-await authClient.tenancy.statement.create({
-  id: 'code:review',
-})
+await authClient.tenancy.statement.create({ id: 'code:commit' })
+await authClient.tenancy.statement.create({ id: 'code:review' })
 
 // Create role
 const seniorEngineer = await authClient.tenancy.role.create({
@@ -1057,7 +1085,48 @@ await authClient.tenancy.invitation.accept({
 await authClient.tenancy.invitation.cleanupExpired()
 ```
 
-### Example 3: React Native/Expo App
+### Example 3: Deep Team Nesting
+
+```typescript
+// Organization
+const org = await authClient.tenancy.organization.create({
+  name: 'Global Corp', slug: 'global-corp'
+})
+
+// Region (top-level team)
+const americas = await authClient.tenancy.team.create({
+  parentType: 'organization', parentId: org.id,
+  name: 'Americas', slug: 'americas'
+})
+
+// Country (nested team)
+const usa = await authClient.tenancy.team.create({
+  parentType: 'team', parentId: americas.id,
+  name: 'United States', slug: 'usa'
+})
+
+// Office (deeply nested team)
+const nyc = await authClient.tenancy.team.create({
+  parentType: 'team', parentId: usa.id,
+  name: 'New York Office', slug: 'nyc'
+})
+
+// Department (even deeper)
+const nycEngineering = await authClient.tenancy.team.create({
+  parentType: 'team', parentId: nyc.id,
+  name: 'Engineering', slug: 'engineering'
+})
+
+// Permission check walks up: nycEngineering -> nyc -> usa -> americas -> org
+const result = await authClient.tenancy.permission.check({
+  userId: user.id,
+  statementId: 'budget:approve',
+  contextType: 'team',
+  contextId: nycEngineering.id,
+})
+```
+
+### Example 4: React Native/Expo App
 
 ```typescript
 import { createAuthClient } from 'better-auth/react'
@@ -1098,7 +1167,7 @@ function App() {
 }
 ```
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
 1. **Always use HTTPS in production**
 2. **Validate user input** on the server side
@@ -1108,8 +1177,9 @@ function App() {
 6. **Use audit hooks** for logging and monitoring permission changes
 7. **Implement rate limiting** on invitation endpoints
 8. **Use environment variables** for sensitive configuration
+9. **Set `maxNestingDepth`** to prevent excessive hierarchy depth
 
-## 📝 Development
+## Development
 
 ### Development Setup
 
@@ -1138,13 +1208,13 @@ bun run lint       # Lint code
 bun run test       # Run tests
 ```
 
-## 🆘 Support
+## Support
 
-- 🐛 Issues: [GitHub Issues](https://github.com/zytera/better-auth-tenancy/issues)
-- 📖 Documentation: [Full Docs](https://github.com/zytera/better-auth-tenancy/docs)
+- Issues: [GitHub Issues](https://github.com/zytera/better-auth-tenancy/issues)
+- Documentation: [Full Docs](https://github.com/zytera/better-auth-tenancy/docs)
 
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Better Auth](https://github.com/better-auth/better-auth) - Authentication framework
 - [Expo](https://expo.dev) - Mobile framework

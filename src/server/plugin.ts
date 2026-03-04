@@ -2,7 +2,6 @@ import type { TenancyConfig } from '../types'
 import type { BetterAuthPlugin } from 'better-auth'
 import { organizationEndpoints } from './organizations'
 import { teamEndpoints } from './teams'
-import { subteamEndpoints } from './subteams'
 import { statementEndpoints } from './statements'
 import { roleEndpoints } from './roles'
 import { memberEndpoints } from './members'
@@ -14,6 +13,7 @@ import { permissionEndpoints } from './permissions'
  *
  * Multi-tenant organizations with hierarchical RBAC.
  * Complete workspace management with teams, roles, and permissions.
+ * Teams support unlimited nesting via parentType/parentId.
  *
  * @example
  * ```typescript
@@ -53,7 +53,6 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
     endpoints: {
       ...organizationEndpoints(config),
       ...teamEndpoints(config),
-      ...subteamEndpoints(config),
       ...statementEndpoints(config),
       ...roleEndpoints(config),
       ...memberEndpoints(config),
@@ -62,7 +61,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
     },
     options: config,
     schema: {
-      // Organizations, Teams, Subteams
+      // Organizations
       organization: {
         fields: {
           id: { type: 'string', required: true },
@@ -73,21 +72,12 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
           updatedAt: { type: 'date', required: true },
         },
       },
+      // Teams (with unlimited nesting via parentType/parentId)
       team: {
         fields: {
           id: { type: 'string', required: true },
-          organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
-          name: { type: 'string', required: true },
-          slug: { type: 'string', required: true },
-          metadata: { type: 'string', required: false },
-          createdAt: { type: 'date', required: true },
-          updatedAt: { type: 'date', required: true },
-        },
-      },
-      subteam: {
-        fields: {
-          id: { type: 'string', required: true },
-          teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
+          parentType: { type: 'string', required: true },
+          parentId: { type: 'string', required: true },
           name: { type: 'string', required: true },
           slug: { type: 'string', required: true },
           metadata: { type: 'string', required: false },
@@ -115,69 +105,34 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
         },
       },
       // Roles
-      organizationRole: {
+      role: {
         fields: {
           id: { type: 'string', required: true },
-          organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
+          contextType: { type: 'string', required: true },
+          contextId: { type: 'string', required: true },
           name: { type: 'string', required: true },
           description: { type: 'string', required: false },
           createdAt: { type: 'date', required: true },
           updatedAt: { type: 'date', required: true },
         },
       },
-      organizationRoleStatement: {
+      roleStatement: {
         fields: {
           id: { type: 'string', required: true },
-          roleId: { type: 'string', required: true, references: { model: 'organizationRole', field: 'id' } },
-          statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
-          createdAt: { type: 'date', required: true },
-        },
-      },
-      teamRole: {
-        fields: {
-          id: { type: 'string', required: true },
-          teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
-          name: { type: 'string', required: true },
-          description: { type: 'string', required: false },
-          createdAt: { type: 'date', required: true },
-          updatedAt: { type: 'date', required: true },
-        },
-      },
-      teamRoleStatement: {
-        fields: {
-          id: { type: 'string', required: true },
-          roleId: { type: 'string', required: true, references: { model: 'teamRole', field: 'id' } },
+          roleId: { type: 'string', required: true, references: { model: 'role', field: 'id' } },
           statementId: { type: 'string', required: true, references: { model: 'statement', field: 'id' } },
           createdAt: { type: 'date', required: true },
         },
       },
       // Members
-      organizationMember: {
+      member: {
         fields: {
           id: { type: 'string', required: true },
-          organizationId: { type: 'string', required: true, references: { model: 'organization', field: 'id' } },
+          contextType: { type: 'string', required: true },
+          contextId: { type: 'string', required: true },
           userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
-          roleId: { type: 'string', required: false, references: { model: 'organizationRole', field: 'id' } },
-          createdAt: { type: 'date', required: true },
-          updatedAt: { type: 'date', required: true },
-        },
-      },
-      teamMember: {
-        fields: {
-          id: { type: 'string', required: true },
-          teamId: { type: 'string', required: true, references: { model: 'team', field: 'id' } },
-          userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
-          roleId: { type: 'string', required: false, references: { model: 'teamRole', field: 'id' } },
-          createdAt: { type: 'date', required: true },
-          updatedAt: { type: 'date', required: true },
-        },
-      },
-      subteamMember: {
-        fields: {
-          id: { type: 'string', required: true },
-          subteamId: { type: 'string', required: true, references: { model: 'subteam', field: 'id' } },
-          userId: { type: 'string', required: true, references: { model: 'user', field: 'id' } },
-          roleId: { type: 'string', required: false, references: { model: 'teamRole', field: 'id' } },
+          roleId: { type: 'string', required: false, references: { model: 'role', field: 'id' } },
+          metadata: { type: 'string', required: false },
           createdAt: { type: 'date', required: true },
           updatedAt: { type: 'date', required: true },
         },

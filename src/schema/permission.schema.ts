@@ -4,7 +4,7 @@ import { generateId } from 'better-auth'
 /**
  * Context Type - Defines the hierarchy level where a permission applies
  */
-export const contextTypes = ['organization', 'team', 'subteam'] as const
+export const contextTypes = ['organization', 'team'] as const
 export const contextTypeSchema = z.enum(contextTypes)
 export type ContextType = z.infer<typeof contextTypeSchema>
 
@@ -18,7 +18,7 @@ export const permissionGrantSchema = z.object({
   userId: z.string(), // References Better Auth user ID
   statementId: z.string(),
   contextType: contextTypeSchema,
-  contextId: z.string(), // References organization, team, or subteam ID
+  contextId: z.string(), // References organization or team ID
   expiresAt: z.date().nullish(), // Nullable - if null, grant never expires
   grantedBy: z.string(), // User ID who granted this permission
   createdAt: z.date().default(() => new Date()),
@@ -34,7 +34,7 @@ export const permissionDenySchema = z.object({
   userId: z.string(), // References Better Auth user ID
   statementId: z.string(),
   contextType: contextTypeSchema,
-  contextId: z.string(), // References organization, team, or subteam ID
+  contextId: z.string(), // References organization or team ID
   deniedBy: z.string(), // User ID who denied this permission
   createdAt: z.date().default(() => new Date()),
 })

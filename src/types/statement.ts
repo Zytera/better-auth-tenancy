@@ -6,7 +6,7 @@ export type StatementId = string
 
 /**
  * Statement category - the resource type
- * Examples: "organization", "team", "subteam", "member", "role", "permission"
+ * Examples: "organization", "team", "member", "role", "permission"
  */
 export type StatementCategory = string
 
@@ -91,7 +91,6 @@ export interface UpdateStatementInput {
 export const CommonStatementCategories = {
   ORGANIZATION: 'organization',
   TEAM: 'team',
-  SUBTEAM: 'subteam',
   MEMBER: 'member',
   ROLE: 'role',
   STATEMENT: 'statement',
