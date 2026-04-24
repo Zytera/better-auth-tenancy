@@ -115,9 +115,9 @@ export interface TenancyConfig {
  * Automatically populated by the plugin before calling hooks
  */
 export interface ResourceContext {
-  /** Context type (organization, team, or subteam) */
-  contextType: 'organization' | 'team' | 'subteam'
-  /** Context ID (organizationId, teamId, or subteamId) */
+  /** Context type (organization or team) */
+  contextType: 'organization' | 'team'
+  /** Context ID (organizationId or teamId) */
   contextId: string
   /** The resource data itself (member, role, permission, etc.) */
   data?: any
@@ -145,31 +145,6 @@ export type EndpointAuthHook = (context: EndpointAuthContext) => Promise<void | 
 /**
  * Endpoint protection configuration
  * Each endpoint action can have a custom authorization hook
- *
- * @example
- * ```typescript
- * endpoints: {
- *   organization: {
- *     create: async ({ ctx, body }) => {
- *       // Custom auth: only allow if user has 'org:create' permission
- *       const user = ctx.context.session?.user
- *       if (!user) throw new Error('Unauthorized')
- *
- *       const canCreate = await checkPermission(user.id, 'org:create')
- *       if (!canCreate) throw new Error('Permission denied')
- *     },
- *     update: async ({ ctx, body }) => {
- *       // Different logic for updates
- *       const user = ctx.context.session?.user
- *       if (!user) throw new Error('Unauthorized')
- *
- *       // Only allow updating your own organizations
- *       const org = await getOrg(body.id)
- *       if (org.ownerId !== user.id) throw new Error('Not the owner')
- *     }
- *   }
- * }
- * ```
  */
 export interface EndpointConfig {
   organization?: {
@@ -180,13 +155,6 @@ export interface EndpointConfig {
     list?: EndpointAuthHook
   }
   team?: {
-    create?: EndpointAuthHook
-    read?: EndpointAuthHook
-    update?: EndpointAuthHook
-    delete?: EndpointAuthHook
-    list?: EndpointAuthHook
-  }
-  subteam?: {
     create?: EndpointAuthHook
     read?: EndpointAuthHook
     update?: EndpointAuthHook
@@ -247,16 +215,22 @@ export interface EndpointConfig {
  */
 export interface HierarchyLimits {
   /**
-   * Maximum number of teams per organization
+   * Maximum number of teams per organization (direct children only)
    * @default undefined (no limit)
    */
   maxTeamsPerOrganization?: number
 
   /**
-   * Maximum number of subteams per team
+   * Maximum number of child teams per team
    * @default undefined (no limit)
    */
-  maxSubteamsPerTeam?: number
+  maxChildTeamsPerTeam?: number
+
+  /**
+   * Maximum nesting depth for teams (1 = only org→team, 2 = org→team→team, etc.)
+   * @default undefined (no limit)
+   */
+  maxNestingDepth?: number
 
   /**
    * Maximum number of members in an organization
@@ -271,12 +245,6 @@ export interface HierarchyLimits {
   maxMembersPerTeam?: number
 
   /**
-   * Maximum number of members in a subteam
-   * @default undefined (no limit)
-   */
-  maxMembersPerSubteam?: number
-
-  /**
    * Maximum number of custom roles per organization
    * @default undefined (no limit)
    */
@@ -284,7 +252,6 @@ export interface HierarchyLimits {
 
   /**
    * Maximum number of custom roles per team
-   * Note: Subteams use team roles, so this limit applies to both teams and their subteams
    * @default undefined (no limit)
    */
   maxRolesPerTeam?: number
@@ -305,13 +272,6 @@ export interface I18nConfig {
    * Uses ISO alpha-2 language code format (2 characters)
    * Applied to both statement translations and error messages
    * @default 'en'
-   *
-   * @example
-   * ```typescript
-   * i18n: {
-   *   defaultLocale: 'es'  // Spanish by default
-   * }
-   * ```
    */
   defaultLocale?: string
 
@@ -321,31 +281,6 @@ export interface I18nConfig {
    * Uses ISO alpha-2 language codes (2 characters)
    *
    * Built-in translations available: English ('en'), Spanish ('es')
-   *
-   * Error message keys support parameter interpolation with {{variable}} syntax
-   *
-   * @example
-   * ```typescript
-   * i18n: {
-   *   errorMessages: {
-   *     es: {
-   *       'role.not_found': 'Rol no encontrado',
-   *       'role.delete.in_use_members': 'No se puede eliminar el rol asignado a {{count}} miembro(s)',
-   *       'member.limit_reached': 'Límite de miembros alcanzado'
-   *     },
-   *     fr: {
-   *       'role.not_found': 'Rôle introuvable',
-   *       'member.limit_reached': 'Limite de membres atteinte'
-   *     }
-   *   }
-   * }
-   * ```
-   *
-   * How it works:
-   * 1. API extracts ISO alpha-2 code from Accept-Language header
-   * 2. Falls back to defaultLocale if header is missing
-   * 3. Checks custom errorMessages first, then built-in translations
-   * 4. Always falls back to English if translation not found
    */
   errorMessages?: Record<string, Record<string, string>>
 }
@@ -370,30 +305,6 @@ export interface InvitationConfig {
 /**
  * Permission filtering hooks for list endpoints
  * Allows users to implement custom filtering logic based on permissions
- *
- * @example
- * ```typescript
- * permissionFiltering: {
- *   filterOrganizations: async (ctx, organizations) => {
- *     // Access session from ctx
- *     const session = await getSessionFromCtx(ctx)
- *     if (!session?.user) return organizations
- *
- *     // Custom logic: implement your own filtering based on business rules
- *     return organizations.filter(org => canAccessOrg(session.user.id, org.id))
- *   },
- *   filterTeams: async (ctx, teams, context) => {
- *     // Access session and params from ctx
- *     const session = await getSessionFromCtx(ctx)
- *     const { organizationId } = context
- *
- *     // Custom logic: only show teams where user has 'team:read' permission
- *     return teams.filter(team => {
- *       return hasPermission(session.user.id, 'team:read', 'team', team.id)
- *     })
- *   }
- * }
- * ```
  */
 export interface PermissionFilteringHooks {
   /**
@@ -415,7 +326,7 @@ export interface PermissionFilteringHooks {
    *
    * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param teams - Array of teams from the database
-   * @param context - Additional context (organizationId)
+   * @param context - Additional context (parentType, parentId)
    * @returns Promise<Array> - Filtered array of teams the user can see
    *
    * If not provided, all teams are returned (no filtering)
@@ -423,23 +334,7 @@ export interface PermissionFilteringHooks {
   filterTeams?: <T>(
     ctx: any,
     teams: T[],
-    context: { organizationId: string }
-  ) => Promise<T[]>
-
-  /**
-   * Filter subteams list based on user permissions
-   *
-   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
-   * @param subteams - Array of subteams from the database
-   * @param context - Additional context (teamId, organizationId)
-   * @returns Promise<Array> - Filtered array of subteams the user can see
-   *
-   * If not provided, all subteams are returned (no filtering)
-   */
-  filterSubteams?: <T>(
-    ctx: any,
-    subteams: T[],
-    context: { teamId: string; organizationId: string }
+    context: { parentType: string; parentId: string }
   ) => Promise<T[]>
 
   /**
@@ -463,7 +358,7 @@ export interface PermissionFilteringHooks {
    *
    * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
    * @param members - Array of members from the database
-   * @param context - Additional context (teamId, organizationId)
+   * @param context - Additional context (teamId, parentType, parentId)
    * @returns Promise<Array> - Filtered array of members the user can see
    *
    * If not provided, all members are returned (no filtering)
@@ -471,23 +366,7 @@ export interface PermissionFilteringHooks {
   filterTeamMembers?: <T>(
     ctx: any,
     members: T[],
-    context: { teamId: string; organizationId: string }
-  ) => Promise<T[]>
-
-  /**
-   * Filter subteam members list based on user permissions
-   *
-   * @param ctx - Better Auth endpoint context (contains session, params, query, etc.)
-   * @param members - Array of members from the database
-   * @param context - Additional context (subteamId, teamId, organizationId)
-   * @returns Promise<Array> - Filtered array of members the user can see
-   *
-   * If not provided, all members are returned (no filtering)
-   */
-  filterSubteamMembers?: <T>(
-    ctx: any,
-    members: T[],
-    context: { subteamId: string; teamId: string; organizationId: string }
+    context: { teamId: string; parentType: string; parentId: string }
   ) => Promise<T[]>
 }
 
@@ -500,16 +379,6 @@ export interface MetadataSchemas {
   /**
    * Organization metadata schema
    * Validates the metadata field when creating or updating organizations
-   *
-   * @example
-   * ```typescript
-   * organization: {
-   *   metadata: z.object({
-   *     country: z.string().min(2),
-   *     industry: z.string().optional()
-   *   })
-   * }
-   * ```
    */
   organization?: {
     metadata?: z.ZodType<any>
@@ -518,52 +387,14 @@ export interface MetadataSchemas {
   /**
    * Team metadata schema
    * Validates the metadata field when creating or updating teams
-   *
-   * @example
-   * ```typescript
-   * team: {
-   *   metadata: z.object({
-   *     department: z.string(),
-   *     budget: z.number().optional()
-   *   })
-   * }
-   * ```
    */
   team?: {
     metadata?: z.ZodType<any>
   }
 
   /**
-   * Subteam metadata schema
-   * Validates the metadata field when creating or updating subteams
-   *
-   * @example
-   * ```typescript
-   * subteam: {
-   *   metadata: z.object({
-   *     location: z.string(),
-   *     capacity: z.number().optional()
-   *   })
-   * }
-   * ```
-   */
-  subteam?: {
-    metadata?: z.ZodType<any>
-  }
-
-  /**
-   * Member metadata schema (applies to organization, team, and subteam members)
+   * Member metadata schema (applies to organization and team members)
    * Validates the metadata field when adding or updating members
-   *
-   * @example
-   * ```typescript
-   * member: {
-   *   metadata: z.object({
-   *     startDate: z.string(),
-   *     position: z.string().optional()
-   *   })
-   * }
-   * ```
    */
   member?: {
     metadata?: z.ZodType<any>
@@ -572,16 +403,6 @@ export interface MetadataSchemas {
   /**
    * Invitation metadata schema
    * Validates the metadata field when creating invitations
-   *
-   * @example
-   * ```typescript
-   * invitation: {
-   *   metadata: z.object({
-   *     inviterNote: z.string().optional(),
-   *     customMessage: z.string().optional()
-   *   })
-   * }
-   * ```
    */
   invitation?: {
     metadata?: z.ZodType<any>

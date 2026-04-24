@@ -141,7 +141,8 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                 team: {
                     create: async (
                         data: {
-                            organizationId: string;
+                            parentType: 'organization' | 'team';
+                            parentId: string;
                             name: string;
                             slug: string;
                             metadata?: Record<string, unknown>
@@ -166,10 +167,10 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     getBySlug: async (
-                        data: { organizationId: string; slug: string },
+                        data: { parentType: 'organization' | 'team'; parentId: string; slug: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
-                        return await $fetch(`/tenancy/team/${data.organizationId}/by-slug/${data.slug}`, {
+                        return await $fetch(`/tenancy/team/${data.parentType}/${data.parentId}/by-slug/${data.slug}`, {
                             method: 'GET',
                             ...fetchOptions,
                         })
@@ -199,7 +200,8 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
 
                     list: async (
                         data: {
-                            organizationId: string;
+                            parentType: 'organization' | 'team';
+                            parentId: string;
                             limit?: number;
                             offset?: number;
                             orderBy?: 'createdAt' | 'name';
@@ -208,81 +210,14 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         fetchOptions?: BetterFetchOption
                     ) => {
                         const params = new URLSearchParams()
-                        params.set('organizationId', data.organizationId)
+                        params.set('parentType', data.parentType)
+                        params.set('parentId', data.parentId)
                         if (data.limit) params.set('limit', String(data.limit))
                         if (data.offset) params.set('offset', String(data.offset))
                         if (data.orderBy) params.set('orderBy', data.orderBy)
                         if (data.orderDirection) params.set('orderDirection', data.orderDirection)
 
                         return await $fetch(`/tenancy/team/list?${params}`, {
-                            method: 'GET',
-                            ...fetchOptions,
-                        })
-                    },
-                },
-
-                subteam: {
-                    create: async (
-                        data: { teamId: string; name: string; slug: string; metadata?: Record<string, unknown> },
-                        fetchOptions?: BetterFetchOption
-                    ) => {
-                        return await $fetch('/tenancy/subteam/create', {
-                            method: 'POST',
-                            body: data,
-                            ...fetchOptions,
-                        })
-                    },
-
-                    get: async (
-                        data: { id: string },
-                        fetchOptions?: BetterFetchOption
-                    ) => {
-                        return await $fetch(`/tenancy/subteam/${data.id}`, {
-                            method: 'GET',
-                            ...fetchOptions,
-                        })
-                    },
-
-                    update: async (
-                        data: { id: string; name?: string; slug?: string; metadata?: Record<string, unknown> },
-                        fetchOptions?: BetterFetchOption
-                    ) => {
-                        return await $fetch('/tenancy/subteam/update', {
-                            method: 'POST',
-                            body: data,
-                            ...fetchOptions,
-                        })
-                    },
-
-                    delete: async (
-                        data: { id: string },
-                        fetchOptions?: BetterFetchOption
-                    ) => {
-                        return await $fetch('/tenancy/subteam/delete', {
-                            method: 'POST',
-                            body: data,
-                            ...fetchOptions,
-                        })
-                    },
-
-                    list: async (
-                        data: {
-                            teamId: string;
-                            limit?: number;
-                            offset?: number;
-                            orderBy?: 'createdAt' | 'name';
-                            orderDirection?: 'asc' | 'desc'
-                        },
-                        fetchOptions?: BetterFetchOption
-                    ) => {
-                        const params = new URLSearchParams()
-                        params.set('teamId', data.teamId)
-                        if (data.limit) params.set('limit', String(data.limit))
-                        if (data.offset) params.set('offset', String(data.offset))
-                        if (data.orderBy) params.set('orderBy', data.orderBy)
-                        if (data.orderDirection) params.set('orderDirection', data.orderDirection)
-
-                        return await $fetch(`/tenancy/subteam/list?${params}`, {
                             method: 'GET',
                             ...fetchOptions,
                         })
@@ -472,7 +407,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     add: async (
                         data: {
                             userId: string;
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string;
                             roleId?: string;
                             metadata?: Record<string, unknown>
@@ -531,7 +466,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
 
                     list: async (
                         data: {
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string;
                             limit?: number;
                             offset?: number;
@@ -557,7 +492,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     getUserMemberships: async (
                         data: {
                             userId: string;
-                            contextType?: 'organization' | 'team' | 'subteam';
+                            contextType?: 'organization' | 'team';
                             limit?: number;
                             offset?: number
                         },
@@ -576,7 +511,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     check: async (
-                        data: { userId: string; contextType: 'organization' | 'team' | 'subteam'; contextId: string },
+                        data: { userId: string; contextType: 'organization' | 'team'; contextId: string },
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/member/check', {
@@ -592,7 +527,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         data: {
                             userId: string;
                             statementId: string;
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string;
                             expiresAt?: Date
                         },
@@ -609,7 +544,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         data: {
                             userId: string;
                             statementId: string;
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string
                         },
                         fetchOptions?: BetterFetchOption
@@ -639,7 +574,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         data: {
                             userId: string;
                             statementId: string;
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string
                         },
                         fetchOptions?: BetterFetchOption
@@ -686,7 +621,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                             grants: Array<{
                                 userId: string;
                                 statementId: string;
-                                contextType: 'organization' | 'team' | 'subteam';
+                                contextType: 'organization' | 'team';
                                 contextId: string;
                                 expiresAt?: Date
                             }>
@@ -705,7 +640,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                             denies: Array<{
                                 userId: string;
                                 statementId: string;
-                                contextType: 'organization' | 'team' | 'subteam';
+                                contextType: 'organization' | 'team';
                                 contextId: string
                             }>
                         },
@@ -723,7 +658,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     create: async (
                         data: {
                             identifier?: string;
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string;
                             roleId?: string;
                             expiresInHours?: number;
@@ -794,7 +729,7 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
 
                     list: async (
                         data: {
-                            contextType: 'organization' | 'team' | 'subteam';
+                            contextType: 'organization' | 'team';
                             contextId: string;
                             limit?: number;
                             offset?: number;

@@ -6,7 +6,6 @@
 export type ErrorMessageKey =
   // Role errors
   | 'role.delete.in_use_members'
-  | 'role.delete.in_use_subteam_members'
   | 'role.limit_reached'
   | 'role.already_exists'
   | 'role.not_found'
@@ -30,11 +29,7 @@ export type ErrorMessageKey =
   | 'team.slug_exists'
   | 'team.limit_reached'
   | 'team.not_found'
-
-  // Subteam errors
-  | 'subteam.slug_exists'
-  | 'subteam.limit_reached'
-  | 'subteam.not_found'
+  | 'team.nesting_depth_exceeded'
 
   // Invitation errors
   | 'invitation.not_found'
@@ -52,7 +47,6 @@ export const errorMessages: Record<string, Record<ErrorMessageKey, string>> = {
   en: {
     // Role errors
     'role.delete.in_use_members': 'Cannot delete role that is assigned to {{count}} member(s). Please reassign members to another role first.',
-    'role.delete.in_use_subteam_members': 'Cannot delete role that is assigned to {{count}} subteam member(s). Please reassign members to another role first.',
     'role.limit_reached': 'Role limit reached ({{limit}} maximum)',
     'role.already_exists': 'Role "{{name}}" already exists',
     'role.not_found': 'Role not found',
@@ -73,14 +67,10 @@ export const errorMessages: Record<string, Record<ErrorMessageKey, string>> = {
     'organization.not_found': 'Organization with id "{{id}}" not found',
 
     // Team errors
-    'team.slug_exists': 'Team with slug "{{slug}}" already exists in this organization',
-    'team.limit_reached': 'Organization has reached maximum number of teams ({{limit}})',
+    'team.slug_exists': 'Team with slug "{{slug}}" already exists in this context',
+    'team.limit_reached': 'Maximum number of teams reached ({{limit}})',
     'team.not_found': 'Team with id "{{id}}" not found',
-
-    // Subteam errors
-    'subteam.slug_exists': 'Subteam with slug "{{slug}}" already exists',
-    'subteam.limit_reached': 'Team has reached maximum number of subteams',
-    'subteam.not_found': 'Subteam not found',
+    'team.nesting_depth_exceeded': 'Maximum nesting depth reached ({{limit}} levels)',
 
     // Invitation errors
     'invitation.not_found': 'Invitation not found',
@@ -91,7 +81,6 @@ export const errorMessages: Record<string, Record<ErrorMessageKey, string>> = {
   es: {
     // Role errors
     'role.delete.in_use_members': 'No se puede eliminar el rol asignado a {{count}} miembro(s). Por favor, reasigna los miembros a otro rol primero.',
-    'role.delete.in_use_subteam_members': 'No se puede eliminar el rol asignado a {{count}} miembro(s) de subequipo. Por favor, reasigna los miembros a otro rol primero.',
     'role.limit_reached': 'Límite de roles alcanzado (máximo {{limit}})',
     'role.already_exists': 'El rol "{{name}}" ya existe',
     'role.not_found': 'Rol no encontrado',
@@ -112,14 +101,10 @@ export const errorMessages: Record<string, Record<ErrorMessageKey, string>> = {
     'organization.not_found': 'Organización con id "{{id}}" no encontrada',
 
     // Team errors
-    'team.slug_exists': 'Ya existe un equipo con el slug "{{slug}}" en esta organización',
-    'team.limit_reached': 'La organización ha alcanzado el número máximo de equipos ({{limit}})',
+    'team.slug_exists': 'Ya existe un equipo con el slug "{{slug}}" en este contexto',
+    'team.limit_reached': 'Número máximo de equipos alcanzado ({{limit}})',
     'team.not_found': 'Equipo con id "{{id}}" no encontrado',
-
-    // Subteam errors
-    'subteam.slug_exists': 'Ya existe un subequipo con el slug "{{slug}}"',
-    'subteam.limit_reached': 'El equipo ha alcanzado el número máximo de subequipos',
-    'subteam.not_found': 'Subequipo no encontrado',
+    'team.nesting_depth_exceeded': 'Profundidad máxima de anidamiento alcanzada ({{limit}} niveles)',
 
     // Invitation errors
     'invitation.not_found': 'Invitación no encontrada',

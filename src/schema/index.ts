@@ -4,10 +4,10 @@
  * This file exports all database schemas for the Better Auth Tenancy plugin.
  * The schemas are organized into logical groups:
  *
- * 1. Hierarchical Entities: organization, team, subteam
+ * 1. Hierarchical Entities: organization, team (with unlimited nesting via parentType/parentId)
  * 2. Permission System: statement, statementTranslation
- * 3. Custom Roles: organizationRole, organizationRoleStatement, teamRole, teamRoleStatement
- * 4. Memberships: organizationMember, teamMember, subteamMember
+ * 3. Custom Roles: role, roleStatement
+ * 4. Memberships: member (unified with contextType/contextId)
  * 5. Explicit Permissions: permissionGrant, permissionDeny
  * 6. Invitations: invitation
  */
@@ -15,15 +15,12 @@
 // Import all schemas for the allSchemas array
 import { organizationSchema } from './organization.schema'
 import { teamSchema } from './team.schema'
-import { subteamSchema } from './subteam.schema'
 import { statementSchema, statementTranslationSchema } from './statement.schema'
 import {
-  organizationRoleSchema,
-  organizationRoleStatementSchema,
-  teamRoleSchema,
-  teamRoleStatementSchema,
+  roleSchema,
+  roleStatementSchema,
 } from './role.schema'
-import { organizationMemberSchema, teamMemberSchema, subteamMemberSchema } from './member.schema'
+import { memberSchema } from './member.schema'
 import { permissionGrantSchema, permissionDenySchema } from './permission.schema'
 import { invitationSchema } from './invitation.schema'
 
@@ -35,13 +32,11 @@ export {
 
 export {
   teamSchema,
+  teamParentTypes,
+  teamParentTypeSchema,
   type Team,
+  type TeamParentType,
 } from './team.schema'
-
-export {
-  subteamSchema,
-  type Subteam,
-} from './subteam.schema'
 
 // Permission System
 export {
@@ -53,24 +48,16 @@ export {
 
 // Custom Roles
 export {
-  organizationRoleSchema,
-  organizationRoleStatementSchema,
-  teamRoleSchema,
-  teamRoleStatementSchema,
-  type OrganizationRole,
-  type OrganizationRoleStatement,
-  type TeamRole,
-  type TeamRoleStatement,
+  roleSchema,
+  roleStatementSchema,
+  type Role,
+  type RoleStatement,
 } from './role.schema'
 
 // Memberships
 export {
-  organizationMemberSchema,
-  teamMemberSchema,
-  subteamMemberSchema,
-  type OrganizationMember,
-  type TeamMember,
-  type SubteamMember,
+  memberSchema,
+  type Member,
 } from './member.schema'
 
 // Explicit Permissions
@@ -103,22 +90,17 @@ export const allSchemas = [
   // Hierarchical Entities
   organizationSchema,
   teamSchema,
-  subteamSchema,
 
   // Permission System
   statementSchema,
   statementTranslationSchema,
 
   // Custom Roles
-  organizationRoleSchema,
-  organizationRoleStatementSchema,
-  teamRoleSchema,
-  teamRoleStatementSchema,
+  roleSchema,
+  roleStatementSchema,
 
   // Memberships
-  organizationMemberSchema,
-  teamMemberSchema,
-  subteamMemberSchema,
+  memberSchema,
 
   // Explicit Permissions
   permissionGrantSchema,

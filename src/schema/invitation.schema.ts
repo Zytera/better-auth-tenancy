@@ -10,7 +10,7 @@ export type InvitationStatus = z.infer<typeof invitationStatusSchema>
 /**
  * Context Type for invitations (same as permissions)
  */
-export const invitationContextTypes = ['organization', 'team', 'subteam'] as const
+export const invitationContextTypes = ['organization', 'team'] as const
 export const invitationContextTypeSchema = z.enum(invitationContextTypes)
 export type InvitationContextType = z.infer<typeof invitationContextTypeSchema>
 
@@ -59,7 +59,7 @@ export const invitationSchema = z.object({
    * Context information
    */
   contextType: invitationContextTypeSchema,
-  contextId: z.string(), // References organization, team, or subteam ID
+  contextId: z.string(), // References organization or team ID
   roleId: z.string().nullish(), // Role to assign when accepted
 
   /**

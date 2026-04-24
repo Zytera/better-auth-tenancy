@@ -4,7 +4,7 @@
  * Multi-tenant organizations with hierarchical RBAC for Better Auth.
  *
  * Features:
- * - Hierarchical organizations (Organization → Team → Subteam)
+ * - Hierarchical organizations (Organization → Team → Team → ... unlimited nesting)
  * - Hybrid RBAC (Role-based + statement-level permissions)
  * - Explicit grants and denies (deny always wins)
  * - Custom roles per organization/team
@@ -79,19 +79,16 @@ export {
   // Hierarchical Entities
   organizationSchema,
   teamSchema,
-  subteamSchema,
+  teamParentTypes,
+  teamParentTypeSchema,
   // Permission System
   statementSchema,
   statementTranslationSchema,
   // Custom Roles
-  organizationRoleSchema,
-  organizationRoleStatementSchema,
-  teamRoleSchema,
-  teamRoleStatementSchema,
+  roleSchema,
+  roleStatementSchema,
   // Memberships
-  organizationMemberSchema,
-  teamMemberSchema,
-  subteamMemberSchema,
+  memberSchema,
   // Explicit Permissions
   permissionGrantSchema,
   permissionDenySchema,
@@ -111,19 +108,15 @@ export type {
   // Hierarchical Entities
   Organization,
   Team,
-  Subteam,
+  TeamParentType,
   // Permission System
   Statement,
   StatementTranslation,
   // Custom Roles
-  OrganizationRole,
-  OrganizationRoleStatement,
-  TeamRole,
-  TeamRoleStatement,
+  Role,
+  RoleStatement,
   // Memberships
-  OrganizationMember,
-  TeamMember,
-  SubteamMember,
+  Member,
   // Explicit Permissions
   PermissionGrant,
   PermissionDeny,
@@ -147,7 +140,6 @@ export type {
   ContextWithMetadata,
   OrganizationContext,
   TeamContext,
-  SubteamContext,
   TypedContext,
   ContextResolution,
   ContextValidation,

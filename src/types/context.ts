@@ -1,7 +1,7 @@
 /**
  * Context types - represents the hierarchical levels in the system
  */
-export type ContextType = 'organization' | 'team' | 'subteam'
+export type ContextType = 'organization' | 'team'
 
 /**
  * Context object - represents a specific location in the hierarchy
@@ -47,25 +47,18 @@ export interface OrganizationContext extends ContextWithMetadata {
 }
 
 /**
- * Team context with parent organization
+ * Team context with parent reference (organization or another team)
  */
 export interface TeamContext extends ContextWithMetadata {
   type: 'team'
-  organizationId: string
-}
-
-/**
- * Subteam context with parent team
- */
-export interface SubteamContext extends ContextWithMetadata {
-  type: 'subteam'
-  teamId: string
+  parentType: 'organization' | 'team'
+  parentId: string
 }
 
 /**
  * Union type of all context types with their specific shapes
  */
-export type TypedContext = OrganizationContext | TeamContext | SubteamContext
+export type TypedContext = OrganizationContext | TeamContext
 
 /**
  * Context resolver result - includes the full hierarchy path
@@ -74,8 +67,7 @@ export interface ContextResolution {
   context: Context
   organization?: OrganizationContext
   team?: TeamContext
-  subteam?: SubteamContext
-  hierarchy: Context[] // [organization, team?, subteam?]
+  hierarchy: Context[] // [organization, team?, team?, ...]
 }
 
 /**

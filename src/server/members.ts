@@ -1,62 +1,33 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { OrganizationMember, TeamMember, SubteamMember } from '../schema'
+import type { Member } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 
-export type Member = OrganizationMember | TeamMember | SubteamMember
+export type { Member } from '../schema'
 
 /**
- * Find member and determine its context (organization, team, or subteam)
- * This helper is used to enrich endpoint hooks with resource context
+ * Find member and determine its context (organization or team)
+ * Single query to the unified member model
  */
 export async function findMemberContext(
   adapter: Adapter,
   memberId: string
 ): Promise<ResourceContext | null> {
-  // Try organizationMember
-  const orgMember = await adapter.findOne({
-    model: 'organizationMember',
+  const member = await adapter.findOne({
+    model: 'member',
     where: [{ field: 'id', value: memberId }],
-  }).catch(() => null) as OrganizationMember | null
+  }).catch(() => null) as Member | null
 
-  if (orgMember) {
+  if (member) {
     return {
-      contextType: 'organization',
-      contextId: orgMember.organizationId,
-      data: orgMember,
-    }
-  }
-
-  // Try teamMember
-  const teamMember = await adapter.findOne({
-    model: 'teamMember',
-    where: [{ field: 'id', value: memberId }],
-  }).catch(() => null) as TeamMember | null
-
-  if (teamMember) {
-    return {
-      contextType: 'team',
-      contextId: teamMember.teamId,
-      data: teamMember,
-    }
-  }
-
-  // Try subteamMember
-  const subteamMember = await adapter.findOne({
-    model: 'subteamMember',
-    where: [{ field: 'id', value: memberId }],
-  }).catch(() => null) as SubteamMember | null
-
-  if (subteamMember) {
-    return {
-      contextType: 'subteam',
-      contextId: subteamMember.subteamId,
-      data: subteamMember,
+      contextType: member.contextType as 'organization' | 'team',
+      contextId: member.contextId,
+      data: member,
     }
   }
 
@@ -87,7 +58,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         userId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
         roleId: z.string().optional(),
         metadata: config?.schemas?.member?.metadata ?? z.record(z.unknown()).optional(),
@@ -109,11 +80,9 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       // Check limits
       if (config?.limits) {
-        const model = contextType === 'organization' ? 'organizationMember' : contextType === 'team' ? 'teamMember' : 'subteamMember'
-        const field = contextType === 'organization' ? 'organizationId' : contextType === 'team' ? 'teamId' : 'subteamId'
         const allMembers = await ctx.context.adapter.findMany({
-          model,
-          where: [{ field, value: contextId }],
+          model: 'member',
+          where: [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }],
         }) as Member[]
         const limit = config.limits.maxMembersPerOrganization
         if (limit && allMembers.length >= limit) {
@@ -124,43 +93,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }
       }
 
-      let member: Member
-
-      switch (contextType) {
-        case 'organization':
-          member = await ctx.context.adapter.create({
-            model: 'organizationMember',
-            data: {
-              organizationId: contextId,
-              userId,
-              roleId: roleId || null,
-              metadata,
-            },
-          }) as OrganizationMember
-          break
-        case 'team':
-          member = await ctx.context.adapter.create({
-            model: 'teamMember',
-            data: {
-              teamId: contextId,
-              userId,
-              roleId: roleId || null,
-              metadata,
-            },
-          }) as TeamMember
-          break
-        case 'subteam':
-          member = await ctx.context.adapter.create({
-            model: 'subteamMember',
-            data: {
-              subteamId: contextId,
-              userId,
-              roleId: roleId || null,
-              metadata,
-            },
-          }) as SubteamMember
-          break
-      }
+      const member = await ctx.context.adapter.create({
+        model: 'member',
+        data: {
+          contextType,
+          contextId,
+          userId,
+          roleId: roleId || null,
+          metadata,
+        },
+      }) as Member
 
       const memberEventData = {
         userId,
@@ -175,10 +117,8 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         try {
           await config.actions.onMemberAdded(memberEventData, ctx)
         } catch (error) {
-          const modelName = contextType === 'organization' ? 'organizationMember' :
-            contextType === 'team' ? 'teamMember' : 'subteamMember'
           await ctx.context.adapter.delete({
-            model: modelName,
+            model: 'member',
             where: [{ field: 'id', value: member.id }],
           })
           throw error
@@ -190,15 +130,13 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Enrich with user and role data in parallel for consistent response
-      const roleModel = contextType === 'organization' ? 'organizationRole' : 'teamRole'
-
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
           where: [{ field: 'id', value: userId }],
         }).catch(() => null),
         roleId ? ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: roleId }],
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
@@ -234,90 +172,35 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const { id } = ctx.params
 
-      const orgMember = await ctx.context.adapter.findOne({
-        model: 'organizationMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationMember | null
-      if (orgMember) {
-        // Enrich with user and role data in parallel
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: orgMember.userId }],
-          }).catch(() => null),
-          orgMember.roleId ? ctx.context.adapter.findOne({
-            model: 'organizationRole',
-            where: [{ field: 'id', value: orgMember.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
-
-        // Remove duplicate fields (userId, roleId) - keep only enriched objects
-        const { userId, roleId, ...memberWithoutDuplicates } = orgMember
-
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user || null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+      const resource = await findMemberContext(ctx.context.adapter, id)
+      if (!resource) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
         })
       }
 
-      const teamMember = await ctx.context.adapter.findOne({
-        model: 'teamMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as TeamMember | null
-      if (teamMember) {
-        // Enrich with user and role data in parallel
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: teamMember.userId }],
-          }).catch(() => null),
-          teamMember.roleId ? ctx.context.adapter.findOne({
-            model: 'teamRole',
-            where: [{ field: 'id', value: teamMember.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
+      const memberData = resource.data as Member
 
-        // Remove duplicate fields (userId, roleId) - keep only enriched objects
-        const { userId, roleId, ...memberWithoutDuplicates } = teamMember
+      // Enrich with user and role data in parallel
+      const [user, role] = await Promise.all([
+        ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: memberData.userId }],
+        }).catch(() => null),
+        memberData.roleId ? ctx.context.adapter.findOne({
+          model: 'role',
+          where: [{ field: 'id', value: memberData.roleId }],
+        }).catch(() => null) : Promise.resolve(null)
+      ]) as [any, any]
 
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user || null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
-        })
-      }
+      // Remove duplicate fields (userId, roleId) - keep only enriched objects
+      const { userId, roleId, ...memberWithoutDuplicates } = memberData
 
-      const subteamMember = await ctx.context.adapter.findOne({
-        model: 'subteamMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as SubteamMember | null
-      if (subteamMember) {
-        // Enrich with user and role data in parallel
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: subteamMember.userId }],
-          }).catch(() => null),
-          subteamMember.roleId ? ctx.context.adapter.findOne({
-            model: 'teamRole',
-            where: [{ field: 'id', value: subteamMember.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
-
-        // Remove duplicate fields (userId, roleId) - keep only enriched objects
-        const { userId, roleId, ...memberWithoutDuplicates } = subteamMember
-
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user || null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
-        })
-      }
-
-      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-      throw new APIError('NOT_FOUND', {
-        message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+      return ctx.json({
+        ...memberWithoutDuplicates,
+        user: user || null,
+        role: role ? { id: role.id, name: role.name, description: role.description } : null,
       })
     }
   ),
@@ -357,37 +240,19 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }, session)
 
       const existing = resource.data as Member
-      const memberType = resource.contextType
-
       const oldRoleId = existing.roleId
-      let updated: Member
 
-      if (memberType === 'organization') {
-        updated = await ctx.context.adapter.update({
-          model: 'organizationMember',
-          where: [{ field: 'id', value: id }],
-          update: { roleId },
-        }) as OrganizationMember
-      } else if (memberType === 'team') {
-        updated = await ctx.context.adapter.update({
-          model: 'teamMember',
-          where: [{ field: 'id', value: id }],
-          update: { roleId },
-        }) as TeamMember
-      } else {
-        updated = await ctx.context.adapter.update({
-          model: 'subteamMember',
-          where: [{ field: 'id', value: id }],
-          update: { roleId },
-        }) as SubteamMember
-      }
+      const updated = await ctx.context.adapter.update({
+        model: 'member',
+        where: [{ field: 'id', value: id }],
+        update: { roleId },
+      }) as Member
 
       if (config?.audit?.onRoleChanged) {
-        const contextId = 'organizationId' in existing ? existing.organizationId : 'teamId' in existing ? existing.teamId : (existing as SubteamMember).subteamId
         await config.audit.onRoleChanged({
           userId: existing.userId,
-          contextType: memberType,
-          contextId,
+          contextType: resource.contextType,
+          contextId: resource.contextId,
           oldRoleId: oldRoleId ?? null,
           newRoleId: roleId,
           changedBy: updatedBy,
@@ -396,15 +261,13 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Enrich with user and role data in parallel for consistent response
-      const roleModel = memberType === 'organization' ? 'organizationRole' : 'teamRole'
-
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
           where: [{ field: 'id', value: updated.userId }],
         }).catch(() => null),
         ctx.context.adapter.findOne({
-          model: roleModel,
+          model: 'role',
           where: [{ field: 'id', value: roleId }],
         }).catch(() => null)
       ]) as [any, any]
@@ -441,103 +304,38 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const { id, metadata } = ctx.body
 
-      // Try to find and update the member
-      const orgMember = await ctx.context.adapter.findOne({
-        model: 'organizationMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as OrganizationMember | null
-      if (orgMember) {
-        const updated = await ctx.context.adapter.update({
-          model: 'organizationMember',
-          where: [{ field: 'id', value: id }],
-          update: { metadata },
-        }) as OrganizationMember
-
-        // Enrich with user and role data in parallel for consistent response
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: updated.userId }],
-          }).catch(() => null),
-          updated.roleId ? ctx.context.adapter.findOne({
-            model: 'organizationRole',
-            where: [{ field: 'id', value: updated.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
-
-        const { userId, roleId, ...memberWithoutDuplicates } = updated
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
+      // Try to find the member
+      const resource = await findMemberContext(ctx.context.adapter, id)
+      if (!resource) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
         })
       }
 
-      const teamMember = await ctx.context.adapter.findOne({
-        model: 'teamMember',
+      const updated = await ctx.context.adapter.update({
+        model: 'member',
         where: [{ field: 'id', value: id }],
-      }).catch(() => null) as TeamMember | null
-      if (teamMember) {
-        const updated = await ctx.context.adapter.update({
-          model: 'teamMember',
-          where: [{ field: 'id', value: id }],
-          update: { metadata },
-        }) as TeamMember
+        update: { metadata },
+      }) as Member
 
-        // Enrich with user and role data in parallel for consistent response
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: updated.userId }],
-          }).catch(() => null),
-          updated.roleId ? ctx.context.adapter.findOne({
-            model: 'teamRole',
-            where: [{ field: 'id', value: updated.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
+      // Enrich with user and role data in parallel for consistent response
+      const [user, role] = await Promise.all([
+        ctx.context.adapter.findOne({
+          model: 'user',
+          where: [{ field: 'id', value: updated.userId }],
+        }).catch(() => null),
+        updated.roleId ? ctx.context.adapter.findOne({
+          model: 'role',
+          where: [{ field: 'id', value: updated.roleId }],
+        }).catch(() => null) : Promise.resolve(null)
+      ]) as [any, any]
 
-        const { userId, roleId, ...memberWithoutDuplicates } = updated
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
-        })
-      }
-
-      const subteamMember = await ctx.context.adapter.findOne({
-        model: 'subteamMember',
-        where: [{ field: 'id', value: id }],
-      }).catch(() => null) as SubteamMember | null
-      if (subteamMember) {
-        const updated = await ctx.context.adapter.update({
-          model: 'subteamMember',
-          where: [{ field: 'id', value: id }],
-          update: { metadata },
-        }) as SubteamMember
-
-        // Enrich with user and role data in parallel for consistent response
-        const [user, role] = await Promise.all([
-          ctx.context.adapter.findOne({
-            model: 'user',
-            where: [{ field: 'id', value: updated.userId }],
-          }).catch(() => null),
-          updated.roleId ? ctx.context.adapter.findOne({
-            model: 'teamRole',
-            where: [{ field: 'id', value: updated.roleId }],
-          }).catch(() => null) : Promise.resolve(null)
-        ]) as [any, any]
-
-        const { userId, roleId, ...memberWithoutDuplicates } = updated
-        return ctx.json({
-          ...memberWithoutDuplicates,
-          user: user ? { id: user.id, name: user.name, image: user.image } : null,
-          role: role ? { id: role.id, name: role.name, description: role.description } : null,
-        })
-      }
-
-      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-      throw new APIError('NOT_FOUND', {
-        message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
+      const { userId, roleId, ...memberWithoutDuplicates } = updated
+      return ctx.json({
+        ...memberWithoutDuplicates,
+        user: user ? { id: user.id, name: user.name, image: user.image } : null,
+        role: role ? { id: role.id, name: role.name, description: role.description } : null,
       })
     }
   ),
@@ -576,14 +374,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }, session)
 
       const existing = resource.data as Member
-      const memberType = resource.contextType
-
-      const modelName =
-        memberType === 'organization'
-          ? 'organizationMember'
-          : memberType === 'team'
-            ? 'teamMember'
-            : 'subteamMember'
 
       // Delete member's permission grants and denies
       const [grants, denies] = await Promise.all([
@@ -591,7 +381,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           model: 'permissionGrant',
           where: [
             { field: 'userId', value: existing.userId },
-            { field: 'contextType', value: memberType },
+            { field: 'contextType', value: resource.contextType },
             { field: 'contextId', value: resource.contextId },
           ],
         }) as Promise<any[]>,
@@ -599,7 +389,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           model: 'permissionDeny',
           where: [
             { field: 'userId', value: existing.userId },
-            { field: 'contextType', value: memberType },
+            { field: 'contextType', value: resource.contextType },
             { field: 'contextId', value: resource.contextId },
           ],
         }) as Promise<any[]>
@@ -621,14 +411,14 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       // Delete the member
       await ctx.context.adapter.delete({
-        model: modelName,
+        model: 'member',
         where: [{ field: 'id', value: id }],
       })
 
       if (config?.audit?.onMemberRemoved) {
         await config.audit.onMemberRemoved({
           userId: existing.userId,
-          contextType: memberType,
+          contextType: resource.contextType,
           contextId: resource.contextId,
           removedBy,
           timestamp: new Date(),
@@ -644,7 +434,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'GET',
       query: z.object({
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
         limit: z.coerce.number().min(1).max(100).optional(),
         offset: z.coerce.number().min(0).optional(),
@@ -665,29 +455,24 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Check if we need permission filtering
       const hasPermissionFiltering =
         (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) ||
-        (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) ||
-        (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers)
+        (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers)
 
       let items: Member[]
       let total: number
 
-      const model = contextType === 'organization' ? 'organizationMember' :
-                   contextType === 'team' ? 'teamMember' : 'subteamMember'
-      const field = contextType === 'organization' ? 'organizationId' :
-                   contextType === 'team' ? 'teamId' : 'subteamId'
-      const where = [{ field, value: contextId }]
+      const where = [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }]
 
       // With permission filtering: fetch ALL, filter, return all filtered (no pagination)
       if (hasPermissionFiltering) {
         items = await ctx.context.adapter.findMany({
-          model,
+          model: 'member',
           where,
         }) as Member[]
 
         if (contextType === 'organization' && config?.permissionFiltering?.filterOrganizationMembers) {
           items = await config.permissionFiltering.filterOrganizationMembers(
             ctx,
-            items as OrganizationMember[],
+            items,
             { organizationId: contextId }
           )
         } else if (contextType === 'team' && config?.permissionFiltering?.filterTeamMembers) {
@@ -698,27 +483,9 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           if (team) {
             items = await config.permissionFiltering.filterTeamMembers(
               ctx,
-              items as TeamMember[],
-              { teamId: contextId, organizationId: team.organizationId }
+              items,
+              { teamId: contextId, parentType: team.parentType, parentId: team.parentId }
             )
-          }
-        } else if (contextType === 'subteam' && config?.permissionFiltering?.filterSubteamMembers) {
-          const subteam = await ctx.context.adapter.findOne({
-            model: 'subteam',
-            where: [{ field: 'id', value: contextId }],
-          }) as any
-          if (subteam) {
-            const team = await ctx.context.adapter.findOne({
-              model: 'team',
-              where: [{ field: 'id', value: subteam.teamId }],
-            }) as any
-            if (team) {
-              items = await config.permissionFiltering.filterSubteamMembers(
-                ctx,
-                items as SubteamMember[],
-                { subteamId: contextId, teamId: subteam.teamId, organizationId: team.organizationId }
-              )
-            }
           }
         }
 
@@ -727,13 +494,13 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         // Without permission filtering: use efficient DB pagination
         const [fetchedItems, fetchedTotal] = await Promise.all([
           ctx.context.adapter.findMany({
-            model,
+            model: 'member',
             where,
             limit,
             offset,
           }) as Promise<Member[]>,
           ctx.context.adapter.count({
-            model,
+            model: 'member',
             where,
           })
         ])
@@ -746,9 +513,6 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const userIds = [...new Set(items.map(m => m.userId))]
       const roleIds = [...new Set(items.map(m => m.roleId).filter(Boolean))] as string[]
 
-      const roleModel = contextType === 'organization' ? 'organizationRole' :
-                       contextType === 'team' ? 'teamRole' : 'teamRole'
-
       // Execute user and role queries in parallel
       const [users, roles] = await Promise.all([
         Promise.all(userIds.map(userId =>
@@ -759,7 +523,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         )),
         Promise.all(roleIds.map(roleId =>
           ctx.context.adapter.findOne({
-            model: roleModel,
+            model: 'role',
             where: [{ field: 'id', value: roleId }],
           }).catch(() => null)
         ))
@@ -805,7 +569,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       method: 'GET',
       query: z.object({
         userId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']).optional(),
+        contextType: z.enum(['organization', 'team']).optional(),
       }),
       metadata: {
         openapi: {
@@ -820,46 +584,17 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const { userId, contextType } = ctx.query
 
+      const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
-        switch (contextType) {
-          case 'organization':
-            const orgs = await ctx.context.adapter.findMany({
-              model: 'organizationMember',
-              where: [{ field: 'userId', value: userId }],
-            }) as OrganizationMember[]
-            return ctx.json(orgs)
-          case 'team':
-            const teams = await ctx.context.adapter.findMany({
-              model: 'teamMember',
-              where: [{ field: 'userId', value: userId }],
-            }) as TeamMember[]
-            return ctx.json(teams)
-          case 'subteam':
-            const subteams = await ctx.context.adapter.findMany({
-              model: 'subteamMember',
-              where: [{ field: 'userId', value: userId }],
-            }) as SubteamMember[]
-            return ctx.json(subteams)
-        }
+        where.push({ field: 'contextType', value: contextType })
       }
 
-      // Fetch all memberships in parallel
-      const [orgs, teams, subteams] = await Promise.all([
-        ctx.context.adapter.findMany({
-          model: 'organizationMember',
-          where: [{ field: 'userId', value: userId }],
-        }) as Promise<OrganizationMember[]>,
-        ctx.context.adapter.findMany({
-          model: 'teamMember',
-          where: [{ field: 'userId', value: userId }],
-        }) as Promise<TeamMember[]>,
-        ctx.context.adapter.findMany({
-          model: 'subteamMember',
-          where: [{ field: 'userId', value: userId }],
-        }) as Promise<SubteamMember[]>
-      ])
+      const memberships = await ctx.context.adapter.findMany({
+        model: 'member',
+        where,
+      }) as Member[]
 
-      return ctx.json([...orgs, ...teams, ...subteams])
+      return ctx.json(memberships)
     }
   ),
 
@@ -869,7 +604,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       method: 'POST',
       body: z.object({
         userId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
       }),
       metadata: {
@@ -885,44 +620,16 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       const { userId, contextType, contextId } = ctx.body
 
-      let member: Member | null = null
-      switch (contextType) {
-        case 'organization': {
-          const members = await ctx.context.adapter.findMany({
-            model: 'organizationMember',
-            where: [
-              { field: 'userId', value: userId },
-              { field: 'organizationId', value: contextId },
-            ],
-          }) as OrganizationMember[]
-          member = members[0] || null
-          break
-        }
-        case 'team': {
-          const members = await ctx.context.adapter.findMany({
-            model: 'teamMember',
-            where: [
-              { field: 'userId', value: userId },
-              { field: 'teamId', value: contextId },
-            ],
-          }) as TeamMember[]
-          member = members[0] || null
-          break
-        }
-        case 'subteam': {
-          const members = await ctx.context.adapter.findMany({
-            model: 'subteamMember',
-            where: [
-              { field: 'userId', value: userId },
-              { field: 'subteamId', value: contextId },
-            ],
-          }) as SubteamMember[]
-          member = members[0] || null
-          break
-        }
-      }
+      const members = await ctx.context.adapter.findMany({
+        model: 'member',
+        where: [
+          { field: 'userId', value: userId },
+          { field: 'contextType', value: contextType },
+          { field: 'contextId', value: contextId },
+        ],
+      }) as Member[]
 
-      return ctx.json({ isMember: member !== null })
+      return ctx.json({ isMember: members.length > 0 })
     }
   ),
 })
@@ -935,11 +642,9 @@ export async function _addMember(
   ctx?: any
 ): Promise<Member> {
   if (config?.limits) {
-    const model = input.contextType === 'organization' ? 'organizationMember' : input.contextType === 'team' ? 'teamMember' : 'subteamMember'
-    const field = input.contextType === 'organization' ? 'organizationId' : input.contextType === 'team' ? 'teamId' : 'subteamId'
     const allMembers = await adapter.findMany({
-      model,
-      where: [{ field, value: input.contextId }],
+      model: 'member',
+      where: [{ field: 'contextType', value: input.contextType }, { field: 'contextId', value: input.contextId }],
     }) as Member[]
     const limit = config.limits.maxMembersPerOrganization
     if (limit && allMembers.length >= limit) {
@@ -947,43 +652,16 @@ export async function _addMember(
     }
   }
 
-  let member: Member
-
-  switch (input.contextType) {
-    case 'organization':
-      member = await adapter.create({
-        model: 'organizationMember',
-        data: {
-          organizationId: input.contextId,
-          userId: input.userId,
-          roleId: input.roleId || null,
-          metadata: input.metadata,
-        },
-      }) as OrganizationMember
-      break
-    case 'team':
-      member = await adapter.create({
-        model: 'teamMember',
-        data: {
-          teamId: input.contextId,
-          userId: input.userId,
-          roleId: input.roleId || null,
-          metadata: input.metadata,
-        },
-      }) as TeamMember
-      break
-    case 'subteam':
-      member = await adapter.create({
-        model: 'subteamMember',
-        data: {
-          subteamId: input.contextId,
-          userId: input.userId,
-          roleId: input.roleId || null,
-          metadata: input.metadata,
-        },
-      }) as SubteamMember
-      break
-  }
+  const member = await adapter.create({
+    model: 'member',
+    data: {
+      contextType: input.contextType,
+      contextId: input.contextId,
+      userId: input.userId,
+      roleId: input.roleId || null,
+      metadata: input.metadata,
+    },
+  }) as Member
 
   if (input._addedBy) {
     const memberEventData = {
@@ -999,10 +677,8 @@ export async function _addMember(
       try {
         await config.actions.onMemberAdded(memberEventData, ctx)
       } catch (error) {
-        const modelName = input.contextType === 'organization' ? 'organizationMember' :
-          input.contextType === 'team' ? 'teamMember' : 'subteamMember'
         await adapter.delete({
-          model: modelName,
+          model: 'member',
           where: [{ field: 'id', value: member.id }],
         })
         throw error

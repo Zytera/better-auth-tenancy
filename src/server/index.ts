@@ -12,8 +12,7 @@ export type { TenancyConfig } from './plugin'
 
 // Export endpoint functions
 export { organizationEndpoints } from './organizations'
-export { teamEndpoints } from './teams'
-export { subteamEndpoints } from './subteams'
+export { teamEndpoints, deleteTeamRecursive } from './teams'
 export { statementEndpoints } from './statements'
 export { roleEndpoints } from './roles'
 export { memberEndpoints } from './members'
@@ -26,7 +25,6 @@ export { requireSession, applyEndpointAuth } from './middleware'
 // Export input types
 export type { CreateOrganizationInput, UpdateOrganizationInput } from './organizations'
 export type { CreateTeamInput, UpdateTeamInput } from './teams'
-export type { CreateSubteamInput, UpdateSubteamInput } from './subteams'
 export type { CreateStatementInput } from './statements'
 export type { CreateRoleInput, UpdateRoleInput } from './roles'
 export type { AddMemberInput, UpdateMemberRoleInput, Member } from './members'

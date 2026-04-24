@@ -82,7 +82,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         userId: z.string(),
         statementId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
         expiresAt: z.string().optional(),
       }),
@@ -168,7 +168,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         userId: z.string(),
         statementId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
       }),
       metadata: {
@@ -291,7 +291,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         userId: z.string(),
         statementId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']),
+        contextType: z.enum(['organization', 'team']),
         contextId: z.string(),
       }),
       metadata: {
@@ -361,43 +361,19 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       }
 
       // 3. Check role (third priority)
-      let member: any = null
-      let statementModel: 'organizationRoleStatement' | 'teamRoleStatement' | null = null
+      const members = await ctx.context.adapter.findMany({
+        model: 'member',
+        where: [
+          { field: 'userId', value: userId },
+          { field: 'contextType', value: contextType },
+          { field: 'contextId', value: contextId },
+        ],
+      }) as any[]
+      const member = members[0]
 
-      if (contextType === 'organization') {
-        const members = await ctx.context.adapter.findMany({
-          model: 'organizationMember',
-          where: [
-            { field: 'userId', value: userId },
-            { field: 'organizationId', value: contextId },
-          ],
-        }) as any[]
-        member = members[0]
-        statementModel = 'organizationRoleStatement'
-      } else if (contextType === 'team') {
-        const members = await ctx.context.adapter.findMany({
-          model: 'teamMember',
-          where: [
-            { field: 'userId', value: userId },
-            { field: 'teamId', value: contextId },
-          ],
-        }) as any[]
-        member = members[0]
-        statementModel = 'teamRoleStatement'
-      } else if (contextType === 'subteam') {
-        const members = await ctx.context.adapter.findMany({
-          model: 'subteamMember',
-          where: [
-            { field: 'userId', value: userId },
-            { field: 'subteamId', value: contextId },
-          ],
-        }) as any[]
-        member = members[0]
-      }
-
-      if (member && member.roleId && statementModel) {
+      if (member && member.roleId) {
         const roleStatements = await ctx.context.adapter.findMany({
-          model: statementModel,
+          model: 'roleStatement',
           where: [{ field: 'roleId', value: member.roleId }],
         }) as any[]
         const statementIds = roleStatements.map((rs: any) => rs.statementId)
@@ -413,21 +389,13 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       // 4. Check parent context (hierarchy inheritance)
       let parent: { type: ContextType; id: string } | null = null
 
-      if (contextType === 'subteam') {
-        const subteam = await ctx.context.adapter.findOne({
-          model: 'subteam',
-          where: [{ field: 'id', value: contextId }],
-        }) as any
-        if (subteam) {
-          parent = { type: 'team', id: subteam.teamId }
-        }
-      } else if (contextType === 'team') {
+      if (contextType === 'team') {
         const team = await ctx.context.adapter.findOne({
           model: 'team',
           where: [{ field: 'id', value: contextId }],
         }) as any
         if (team) {
-          parent = { type: 'organization', id: team.organizationId }
+          parent = { type: team.parentType, id: team.parentId }
         }
       }
 
@@ -455,7 +423,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       method: 'GET',
       query: z.object({
         userId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']).optional(),
+        contextType: z.enum(['organization', 'team']).optional(),
         contextId: z.string().optional(),
       }),
       metadata: {
@@ -494,7 +462,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       method: 'GET',
       query: z.object({
         userId: z.string(),
-        contextType: z.enum(['organization', 'team', 'subteam']).optional(),
+        contextType: z.enum(['organization', 'team']).optional(),
         contextId: z.string().optional(),
       }),
       metadata: {
@@ -535,7 +503,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         grants: z.array(z.object({
           userId: z.string(),
           statementId: z.string(),
-          contextType: z.enum(['organization', 'team', 'subteam']),
+          contextType: z.enum(['organization', 'team']),
           contextId: z.string(),
           expiresAt: z.string().optional(),
         })),
@@ -640,7 +608,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         denies: z.array(z.object({
           userId: z.string(),
           statementId: z.string(),
-          contextType: z.enum(['organization', 'team', 'subteam']),
+          contextType: z.enum(['organization', 'team']),
           contextId: z.string(),
         })),
       }),
@@ -770,43 +738,19 @@ async function _checkPermission(
   }
 
   // 3. Check role
-  let member: any = null
-  let statementModel: 'organizationRoleStatement' | 'teamRoleStatement' | null = null
+  const members = await adapter.findMany({
+    model: 'member',
+    where: [
+      { field: 'userId', value: input.userId },
+      { field: 'contextType', value: input.contextType },
+      { field: 'contextId', value: input.contextId },
+    ],
+  }) as any[]
+  const member = members[0]
 
-  if (input.contextType === 'organization') {
-    const members = await adapter.findMany({
-      model: 'organizationMember',
-      where: [
-        { field: 'userId', value: input.userId },
-        { field: 'organizationId', value: input.contextId },
-      ],
-    }) as any[]
-    member = members[0]
-    statementModel = 'organizationRoleStatement'
-  } else if (input.contextType === 'team') {
-    const members = await adapter.findMany({
-      model: 'teamMember',
-      where: [
-        { field: 'userId', value: input.userId },
-        { field: 'teamId', value: input.contextId },
-      ],
-    }) as any[]
-    member = members[0]
-    statementModel = 'teamRoleStatement'
-  } else if (input.contextType === 'subteam') {
-    const members = await adapter.findMany({
-      model: 'subteamMember',
-      where: [
-        { field: 'userId', value: input.userId },
-        { field: 'subteamId', value: input.contextId },
-      ],
-    }) as any[]
-    member = members[0]
-  }
-
-  if (member && member.roleId && statementModel) {
+  if (member && member.roleId) {
     const roleStatements = await adapter.findMany({
-      model: statementModel,
+      model: 'roleStatement',
       where: [{ field: 'roleId', value: member.roleId }],
     }) as any[]
     const statementIds = roleStatements.map((rs: any) => rs.statementId)
@@ -822,21 +766,13 @@ async function _checkPermission(
   // 4. Check parent context
   let parent: { type: ContextType; id: string } | null = null
 
-  if (input.contextType === 'subteam') {
-    const subteam = await adapter.findOne({
-      model: 'subteam',
-      where: [{ field: 'id', value: input.contextId }],
-    }) as any
-    if (subteam) {
-      parent = { type: 'team', id: subteam.teamId }
-    }
-  } else if (input.contextType === 'team') {
+  if (input.contextType === 'team') {
     const team = await adapter.findOne({
       model: 'team',
       where: [{ field: 'id', value: input.contextId }],
     }) as any
     if (team) {
-      parent = { type: 'organization', id: team.organizationId }
+      parent = { type: team.parentType, id: team.parentId }
     }
   }
 

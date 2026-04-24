@@ -3,7 +3,6 @@ import type { ContextType } from './context'
 
 /**
  * Role type - distinguishes between organization and team roles
- * Note: Subteams use team roles from their parent team
  */
 export type RoleType = 'organization' | 'team'
 
