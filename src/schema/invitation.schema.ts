@@ -83,7 +83,7 @@ export const invitationSchema = z.object({
    * - { qrScanned: true, deviceInfo: {...} }
    * - { referralSource: 'employee', department: 'engineering' }
    */
-  metadata: z.record(z.unknown()).nullish(),
+  metadata: z.record(z.string(), z.unknown()).nullish(),
 })
 
 export type Invitation = z.infer<typeof invitationSchema>

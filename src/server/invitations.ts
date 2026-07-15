@@ -77,7 +77,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         roleId: z.string().optional(),
         expiresInHours: z.number().optional(),
         generateCode: z.boolean().optional(),
-        metadata: config?.schemas?.invitation?.metadata ?? z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.invitation?.metadata ?? z.record(z.string(), z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
@@ -338,7 +338,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       body: z.object({
         token: z.string().optional(),
         invitationCode: z.string().optional(),
-        metadata: config?.schemas?.invitation?.metadata?.optional() ?? z.record(z.unknown()).optional(),
+        metadata: config?.schemas?.invitation?.metadata?.optional() ?? z.record(z.string(), z.unknown()).optional(),
       }),
       metadata: {
         openapi: {
