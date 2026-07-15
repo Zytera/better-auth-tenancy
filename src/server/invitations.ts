@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession } from './middleware'
+import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
 import {
   generateInvitationToken,
   generateInvitationCode,
@@ -791,10 +791,15 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      const session = await getSessionFromCtx(ctx)
-      await applyEndpointAuth(config?.endpoints?.invitation?.list, ctx, session)
-
+      const session = await requireSession(ctx)
       const { identifier, status } = ctx.query
+
+      // Identifier lookup: own identifier by default, hook is the admin override.
+      // identifier is opaque (email/phone/etc); match against the user's known
+      // contact fields (phoneNumber comes from Better Auth's phoneNumber plugin).
+      const u = session.user as { email?: string; phoneNumber?: string }
+      const isSelf = !!identifier && (identifier === u.email || identifier === u.phoneNumber)
+      await requireSelfOr(isSelf, config?.endpoints?.invitation?.getByIdentifier, ctx, session)
 
       const where: Array<{ field: string; value: string }> = [{ field: 'identifier', value: identifier }]
       if (status) {

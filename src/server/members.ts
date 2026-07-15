@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Member } from '../schema'
 import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession } from './middleware'
+import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 
@@ -299,8 +299,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      await requireSession(ctx)
-      await applyEndpointAuth(config?.endpoints?.member?.updateRole, ctx)
+      const session = await requireSession(ctx)
 
       const { id, metadata } = ctx.body
 
@@ -312,6 +311,9 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
           message: getErrorMessage('member.not_found', locale, undefined, config?.i18n?.errorMessages)
         })
       }
+
+      // Match updateMemberRole's shape: the hook expects ctx.resource + session
+      await applyEndpointAuth(config?.endpoints?.member?.updateRole, { ...ctx, resource }, session)
 
       const updated = await ctx.context.adapter.update({
         model: 'member',
@@ -579,10 +581,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      const session = await getSessionFromCtx(ctx)
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
-
+      const session = await requireSession(ctx)
       const { userId, contextType } = ctx.query
+
+      // Subject lookup: self by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.member?.getMemberships, ctx, session)
 
       const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
@@ -615,10 +618,11 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      const session = await getSessionFromCtx(ctx)
-      await applyEndpointAuth(config?.endpoints?.member?.list, ctx, session)
-
+      const session = await requireSession(ctx)
       const { userId, contextType, contextId } = ctx.body
+
+      // Subject lookup: self by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.member?.getMemberships, ctx, session)
 
       const members = await ctx.context.adapter.findMany({
         model: 'member',

@@ -169,6 +169,12 @@ export interface EndpointConfig {
     bulkAdd?: EndpointAuthHook
     bulkRemove?: EndpointAuthHook
     transfer?: EndpointAuthHook
+    /**
+     * Override for querying ANOTHER user's memberships (getUserMemberships /
+     * checkMembership). Self-lookups are always allowed. Undefined = self-only
+     * (fail-closed). Must throw to deny — do not reuse the permissive `list` hook.
+     */
+    getMemberships?: EndpointAuthHook
   }
   role?: {
     create?: EndpointAuthHook
@@ -206,6 +212,13 @@ export interface EndpointConfig {
     list?: EndpointAuthHook
     getByToken?: EndpointAuthHook
     cleanupExpired?: EndpointAuthHook
+    /**
+     * Override for querying invitations by an identifier that is NOT the
+     * caller's own email/phone (getInvitationsByIdentifier). Own-identifier
+     * lookups are always allowed. Undefined = self-only (fail-closed). Must
+     * throw to deny — do not reuse the permissive `list` hook.
+     */
+    getByIdentifier?: EndpointAuthHook
   }
 }
 

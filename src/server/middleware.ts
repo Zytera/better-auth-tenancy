@@ -76,3 +76,29 @@ export async function applyEndpointAuth(
   // Hook should throw an error if authorization fails
   return await hook(authContext)
 }
+
+/**
+ * Self-only authorization floor for subject/identifier lookups.
+ *
+ * These endpoints (getUserMemberships, checkMembership, getInvitationsByIdentifier)
+ * look up by userId/identifier, not by context, so the context-scoped list hook
+ * can't authorize them. Default: caller may only query their own subject. A
+ * configured hook acts as the admin override. Unlike applyEndpointAuth, the
+ * no-hook path here is fail-CLOSED, not open.
+ *
+ * @throws {APIError} FORBIDDEN if not self and no override hook is configured
+ */
+export async function requireSelfOr(
+  isSelf: boolean,
+  hook: EndpointAuthHook | undefined,
+  ctx: any,
+  session: any,
+): Promise<void> {
+  if (isSelf) return
+  if (!hook) {
+    throw new APIError('FORBIDDEN', {
+      message: 'You can only access your own resources.',
+    })
+  }
+  await applyEndpointAuth(hook, ctx, session)
+}
