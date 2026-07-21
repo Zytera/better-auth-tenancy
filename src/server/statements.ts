@@ -7,6 +7,7 @@ import { validateStatementId } from '../types/statement'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
+import { ok, created, noContent, okList, okBatch, statementSchema, statementWithTranslationSchema } from './openapi'
 
 export interface CreateStatementInput {
   id: StatementId
@@ -24,6 +25,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Create statement',
           description: 'Create a new permission statement (requires authentication)',
+          responses: created(statementSchema, 'Statement created'),
         },
       },
     },
@@ -82,6 +84,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get statement',
           description: 'Get statement by ID with localized translation based on Accept-Language header',
+          responses: ok(statementWithTranslationSchema, 'The statement with localized translation'),
         },
       },
     },
@@ -151,6 +154,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update statement',
           description: 'Update an existing statement (requires authentication)',
+          responses: ok(statementSchema, 'Updated statement'),
         },
       },
     },
@@ -212,6 +216,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Delete statement',
           description: 'Delete a statement (requires authentication)',
+          responses: noContent('Statement deleted'),
         },
       },
     },
@@ -318,6 +323,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List statements',
           description: 'List all statements with pagination and localized translations based on Accept-Language header. Use category param to filter by category prefixes (comma-separated).',
+          responses: okList(statementWithTranslationSchema, 'List of statements with translations'),
         },
       },
     },
@@ -435,6 +441,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Batch create statements',
           description: 'Create multiple statements at once (requires authentication)',
+          responses: okBatch(statementSchema, 'Batch create result'),
         },
       },
     },

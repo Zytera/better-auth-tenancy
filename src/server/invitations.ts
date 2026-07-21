@@ -14,6 +14,7 @@ import {
 } from '../utils/invitation-helper'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { ok, created, okList, okArray, invitationEnrichedSchema } from './openapi'
 
 export async function findInvitationContext(
   adapter: Adapter,
@@ -83,6 +84,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Create invitation',
           description: 'Create a flexible invitation (email/phone/link/QR) (requires authentication)',
+          responses: created(invitationEnrichedSchema, 'Invitation created'),
         },
       },
     },
@@ -208,6 +210,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get invitation by token',
           description: 'Get invitation details by token (for links/QR)',
+          responses: ok(invitationEnrichedSchema, 'The invitation'),
         },
       },
     },
@@ -273,6 +276,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get invitation by code',
           description: 'Get invitation details by short code',
+          responses: ok(invitationEnrichedSchema, 'The invitation'),
         },
       },
     },
@@ -344,6 +348,10 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Accept invitation',
           description: 'Accept invitation by token or code',
+          responses: ok(
+            { type: 'object', properties: { invitation: invitationEnrichedSchema }, required: ['invitation'] },
+            'Invitation accepted',
+          ),
         },
       },
     },
@@ -469,6 +477,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Reject invitation',
           description: 'Reject/decline an invitation',
+          responses: ok(invitationEnrichedSchema, 'Invitation rejected'),
         },
       },
     },
@@ -577,6 +586,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Cancel invitation',
           description: 'Cancel a pending invitation (admin action) (requires authentication)',
+          responses: ok(invitationEnrichedSchema, 'Invitation cancelled'),
         },
       },
     },
@@ -693,6 +703,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List invitations',
           description: 'List all invitations for a context',
+          responses: okList(invitationEnrichedSchema, 'List of invitations'),
         },
       },
     },
@@ -787,6 +798,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get invitations by identifier',
           description: 'Get all invitations for an identifier (email/phone/etc)',
+          responses: okArray(invitationEnrichedSchema, 'Invitations for the identifier'),
         },
       },
     },
@@ -873,6 +885,10 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Cleanup expired invitations',
           description: 'Mark expired invitations as expired (cron job)',
+          responses: ok(
+            { type: 'object', properties: { expiredCount: { type: 'integer' } }, required: ['expiredCount'] },
+            'Number of invitations marked expired',
+          ),
         },
       },
     },

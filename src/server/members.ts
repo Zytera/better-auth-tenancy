@@ -7,6 +7,7 @@ import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSchema } from './openapi'
 
 export type { Member } from '../schema'
 
@@ -67,6 +68,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Add member',
           description: 'Add a member to a context (requires authentication)',
+          responses: created(memberEnrichedSchema, 'Member added'),
         },
       },
     },
@@ -163,6 +165,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get member',
           description: 'Get member by ID with enriched user and role data',
+          responses: ok(memberEnrichedSchema, 'The member with enriched user and role'),
         },
       },
     },
@@ -199,7 +202,9 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
       return ctx.json({
         ...memberWithoutDuplicates,
-        user: user || null,
+        // Project to the same safe fields as the other member endpoints — avoid
+        // leaking the full user row (email, plugin-added secrets, etc.)
+        user: user ? { id: user.id, name: user.name, image: user.image } : null,
         role: role ? { id: role.id, name: role.name, description: role.description } : null,
       })
     }
@@ -217,6 +222,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update member role',
           description: 'Update a member\'s role (requires authentication)',
+          responses: ok(memberEnrichedSchema, 'Updated member'),
         },
       },
     },
@@ -295,6 +301,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update member metadata',
           description: 'Update a member\'s metadata (requires authentication)',
+          responses: ok(memberEnrichedSchema, 'Updated member'),
         },
       },
     },
@@ -353,6 +360,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Remove member',
           description: 'Remove a member from a context (requires authentication)',
+          responses: noContent('Member removed'),
         },
       },
     },
@@ -445,6 +453,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List members',
           description: 'List all members in a context. When permission filtering is configured, returns all filtered items without pagination (limit/offset params are ignored).',
+          responses: okList(memberEnrichedSchema, 'List of enriched members'),
         },
       },
     },
@@ -577,6 +586,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get user memberships',
           description: 'Get all memberships for a user',
+          responses: okArray(memberSchema, 'The user\'s raw membership rows'),
         },
       },
     },
@@ -614,6 +624,10 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Check membership',
           description: 'Check if user is a member of a context',
+          responses: ok(
+            { type: 'object', properties: { isMember: { type: 'boolean' } }, required: ['isMember'] },
+            'Whether the user is a member',
+          ),
         },
       },
     },
