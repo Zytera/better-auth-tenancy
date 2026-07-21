@@ -617,12 +617,14 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                     },
 
                     listPermissionContexts: async (
-                        data: { userId: string; statementId?: string },
+                        data: { statementId?: string; contextType?: 'organization' | 'team'; contextId?: string; includeDescendants?: boolean } = {},
                         fetchOptions?: BetterFetchOption
                     ) => {
                         const params = new URLSearchParams()
-                        params.set('userId', data.userId)
                         if (data.statementId) params.set('statementId', data.statementId)
+                        if (data.contextType) params.set('contextType', data.contextType)
+                        if (data.contextId) params.set('contextId', data.contextId)
+                        if (data.includeDescendants) params.set('includeDescendants', 'true')
 
                         return await $fetch(`/tenancy/permission/contexts?${params}`, {
                             method: 'GET',

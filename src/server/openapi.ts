@@ -254,14 +254,18 @@ export const permissionContextSchema = {
     name: { type: 'string' },
     parentType: { ...contextType, nullable: true },
     parentId: { type: 'string', nullable: true },
+    organizationId: {
+      type: 'string',
+      description: 'Root organization of this context: the context itself if it is an organization, otherwise the organization at the top of its parent chain.',
+    },
     source: {
       type: 'string',
-      enum: ['role', 'membership', 'grant'],
-      description: 'role = member with an assigned role; membership = member without a role; grant = explicit grant',
+      enum: ['role', 'membership', 'grant', 'inherited'],
+      description: 'role = member with an assigned role; membership = member without a role; grant = explicit grant; inherited = access resolved from a parent context',
     },
     roleId: { type: 'string' },
   },
-  required: ['contextType', 'contextId', 'name', 'parentType', 'parentId', 'source'],
+  required: ['contextType', 'contextId', 'name', 'parentType', 'parentId', 'organizationId', 'source'],
 } as const
 
 // ---------------------------------------------------------------------------

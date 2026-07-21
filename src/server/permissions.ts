@@ -5,7 +5,7 @@ import type { PermissionGrant, PermissionDeny } from '../schema'
 import type { ContextType } from '../types/context'
 import type { StatementId } from '../types/statement'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
+import { applyEndpointAuth, requireSession } from './middleware'
 import {
   ok, created, noContent, okArray, okBatch,
   permissionGrantSchema, permissionDenySchema, permissionCheckSchema, permissionContextSchema,
@@ -510,15 +510,20 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
     {
       method: 'GET',
       query: z.object({
-        userId: z.string(),
         // If provided, only return contexts where this permission resolves to allowed
         statementId: z.string().optional(),
+        // Optional scope filters
+        contextType: z.enum(['organization', 'team']).optional(),
+        contextId: z.string().optional(),
+        // With contextType+contextId+statementId: also return descendant teams of that
+        // scope that resolve to allowed (inherited from the scope or with their own grant).
+        includeDescendants: z.coerce.boolean().optional(),
       }),
       metadata: {
         openapi: {
           summary: 'List permission contexts',
           description:
-            'List the contexts (organizations/teams) a user has access to, with their hierarchy (parentType/parentId). Self-only by default; the permission.contexts hook is the admin override for cross-user lookups.',
+            'List the contexts (organizations/teams) the authenticated user has access to, with their hierarchy (parentType/parentId) and resolved root organizationId.',
           responses: ok(
             {
               type: 'object',
@@ -532,10 +537,8 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
     },
     async (ctx) => {
       const session = await requireSession(ctx)
-      const { userId, statementId } = ctx.query
-
-      // Subject lookup: self by default, dedicated hook is the admin override
-      await requireSelfOr(userId === session.user.id, config?.endpoints?.permission?.contexts, ctx, session)
+      const { statementId, contextType, contextId, includeDescendants } = ctx.query
+      const userId = session.user.id
 
       // Gather distinct contexts the user relates to directly: memberships + grants
       const [members, grants] = await Promise.all([
@@ -549,7 +552,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         }) as Promise<PermissionGrant[]>,
       ])
 
-      type ContextSource = 'role' | 'membership' | 'grant'
+      type ContextSource = 'role' | 'membership' | 'grant' | 'inherited'
       const seen = new Map<string, { contextType: ContextType; contextId: string; source: ContextSource; roleId?: string }>()
       for (const m of members) {
         seen.set(`${m.contextType}:${m.contextId}`, {
@@ -570,8 +573,46 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         }
       }
 
-      // Optional filter: keep only contexts where the given permission resolves to allowed
+      // Optional scope filters
       let entries = [...seen.values()]
+      if (contextType) entries = entries.filter((e) => e.contextType === contextType)
+      if (contextId) entries = entries.filter((e) => e.contextId === contextId)
+
+      // Targeting an exact context with a permission check: access may be inherited
+      // from a parent context, so it won't appear in the direct (membership/grant) set.
+      // Add it as a candidate; the statementId check below decides if it's actually allowed.
+      if (statementId && contextType && contextId && !seen.has(`${contextType}:${contextId}`)) {
+        entries.push({ contextType, contextId, source: 'inherited' })
+      }
+
+      // includeDescendants: expand the scope to its whole team subtree, so the caller
+      // gets every descendant that resolves to allowed (inherited from the scope or its own
+      // grant). Only meaningful as a permission-scoped query (needs contextType+contextId+statementId).
+      if (includeDescendants && statementId && contextType && contextId) {
+        // BFS over parentId, matching (parentType:parentId) to guard against id collisions/cycles.
+        let frontier = new Set([`${contextType}:${contextId}`])
+        const visited = new Set(frontier)
+        for (let depth = 0; frontier.size && depth < 100; depth++) {
+          const frontierIds = [...frontier].map((k) => k.slice(k.indexOf(':') + 1))
+          const children = await ctx.context.adapter.findMany({
+            model: 'team',
+            where: [{ field: 'parentId', operator: 'in', value: frontierIds }],
+          }) as any[]
+          const next = new Set<string>()
+          for (const c of children) {
+            if (!frontier.has(`${c.parentType}:${c.parentId}`)) continue
+            const key = `team:${c.id}`
+            if (visited.has(key)) continue
+            visited.add(key)
+            next.add(key)
+            // Preserve a direct source/roleId if the user already relates to this team
+            entries.push(seen.get(key) ?? { contextType: 'team', contextId: c.id, source: 'inherited' })
+          }
+          frontier = next
+        }
+      }
+
+      // Optional filter: keep only contexts where the given permission resolves to allowed
       if (statementId) {
         const results = await Promise.all(entries.map((entry) =>
           _checkPermission(ctx.context.adapter, {
@@ -596,7 +637,33 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
           : Promise.resolve([]),
       ])
       const orgById = new Map(orgs.map((o) => [o.id, o]))
-      const teamById = new Map(teams.map((t) => [t.id, t]))
+      const teamById = new Map<string, any>(teams.map((t) => [t.id, t]))
+
+      // Load ancestor teams so we can resolve each team's root organization.
+      // The direct-referenced teams may sit deep in a team->team->...->org chain.
+      for (let depth = 0; depth < 100; depth++) {
+        const missing = [...teamById.values()]
+          .filter((t) => t.parentType === 'team' && t.parentId && !teamById.has(t.parentId))
+          .map((t) => t.parentId as string)
+        if (!missing.length) break
+        const parents = await ctx.context.adapter.findMany({
+          model: 'team',
+          where: [{ field: 'id', operator: 'in', value: [...new Set(missing)] }],
+        }) as any[]
+        if (!parents.length) break
+        for (const p of parents) teamById.set(p.id, p)
+      }
+
+      // Walk up a team's parent chain to its root organization id (self if already an org).
+      const resolveOrgId = (type: ContextType, id: string): string | null => {
+        if (type === 'organization') return id
+        let team = teamById.get(id)
+        for (let depth = 0; team && depth < 100; depth++) {
+          if (team.parentType === 'organization') return team.parentId ?? null
+          team = team.parentType === 'team' ? teamById.get(team.parentId) : undefined
+        }
+        return null
+      }
 
       const contexts: Array<{
         contextType: ContextType
@@ -604,6 +671,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         name: string
         parentType: ContextType | null
         parentId: string | null
+        organizationId: string
         source: ContextSource
         roleId?: string
       }> = []
@@ -613,11 +681,14 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
           ? orgById.get(entry.contextId)
           : teamById.get(entry.contextId)
         if (!record) continue
+        const organizationId = resolveOrgId(entry.contextType, entry.contextId)
+        if (!organizationId) continue
         contexts.push({
           ...entry,
           name: record.name,
           parentType: record.parentType ?? null,
           parentId: record.parentId ?? null,
+          organizationId,
         })
       }
 
