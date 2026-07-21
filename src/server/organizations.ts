@@ -7,6 +7,7 @@ import { deleteTeamRecursive } from './teams'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { ok, created, noContent, okList, organizationSchema } from './openapi'
 
 export interface CreateOrganizationInput {
   name: string
@@ -35,6 +36,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Create organization',
           description: 'Create a new organization (requires authentication)',
+          responses: created(organizationSchema, 'Organization created'),
         },
       },
     },
@@ -102,6 +104,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get organization',
           description: 'Get organization by ID',
+          responses: ok(organizationSchema, 'The organization'),
         },
       },
     },
@@ -137,6 +140,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get organization by slug',
           description: 'Get organization by unique slug',
+          responses: ok(organizationSchema, 'The organization'),
         },
       },
     },
@@ -175,6 +179,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update organization',
           description: 'Update an existing organization (requires authentication)',
+          responses: ok(organizationSchema, 'Updated organization'),
         },
       },
     },
@@ -246,6 +251,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Delete organization',
           description: 'Delete organization and all related entities (requires authentication)',
+          responses: noContent('Organization deleted'),
         },
       },
     },
@@ -354,6 +360,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List organizations',
           description: 'List all organizations. When permission filtering is configured, returns all filtered items without pagination.',
+          responses: okList(organizationSchema, 'List of organizations'),
         },
       },
     },

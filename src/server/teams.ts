@@ -7,6 +7,7 @@ import { cleanupContextPermissions } from './permissions'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { ok, created, noContent, okList, teamSchema } from './openapi'
 
 export interface CreateTeamInput {
   parentType: 'organization' | 'team'
@@ -145,6 +146,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Create team',
           description: 'Create a new team within an organization or another team (requires authentication)',
+          responses: created(teamSchema, 'Team created'),
         },
       },
     },
@@ -251,6 +253,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get team',
           description: 'Get team by ID',
+          responses: ok(teamSchema, 'The team'),
         },
       },
     },
@@ -288,6 +291,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get team by slug',
           description: 'Get team by slug within a parent context',
+          responses: ok(teamSchema, 'The team'),
         },
       },
     },
@@ -326,6 +330,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update team',
           description: 'Update an existing team (requires authentication)',
+          responses: ok(teamSchema, 'Updated team'),
         },
       },
     },
@@ -398,6 +403,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Delete team',
           description: 'Delete team and all related entities recursively (requires authentication)',
+          responses: noContent('Team deleted'),
         },
       },
     },
@@ -459,6 +465,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List teams',
           description: 'List all teams under a parent. When permission filtering is configured, returns all filtered items without pagination.',
+          responses: okList(teamSchema, 'List of teams'),
         },
       },
     },

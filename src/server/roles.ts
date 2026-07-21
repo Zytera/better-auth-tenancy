@@ -7,6 +7,7 @@ import type { StatementId } from '../types'
 import { applyEndpointAuth, requireSession } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
 import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { ok, created, noContent, okList, roleSchema, roleWithStatementsSchema, roleListItemSchema } from './openapi'
 
 /**
  * Find role and determine its context
@@ -61,6 +62,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Create role',
           description: 'Create a new role within an organization or team (requires authentication)',
+          responses: created(roleSchema, 'Role created'),
         },
       },
     },
@@ -149,6 +151,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Get role',
           description: 'Get role by ID',
+          responses: ok(roleWithStatementsSchema, 'The role with its statements'),
         },
       },
     },
@@ -251,6 +254,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Update role',
           description: 'Update an existing role (requires authentication)',
+          responses: ok(roleSchema, 'Updated role'),
         },
       },
     },
@@ -315,6 +319,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Delete role',
           description: 'Delete a role (requires authentication)',
+          responses: noContent('Role deleted'),
         },
       },
     },
@@ -398,6 +403,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List roles',
           description: 'List all roles in a context with pagination. Use includeStatements=true to include full statement details.',
+          responses: okList(roleListItemSchema, 'List of roles (statements/statementCount only when includeStatements=true)'),
         },
       },
     },
@@ -532,6 +538,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Add statement to role',
           description: 'Add a statement to a role (requires authentication)',
+          responses: { 201: { description: 'Statement added to role' } },
         },
       },
     },
@@ -592,6 +599,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Remove statement from role',
           description: 'Remove a statement from a role (requires authentication)',
+          responses: noContent('Statement removed from role'),
         },
       },
     },

@@ -616,6 +616,20 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         })
                     },
 
+                    listPermissionContexts: async (
+                        data: { userId: string; statementId?: string },
+                        fetchOptions?: BetterFetchOption
+                    ) => {
+                        const params = new URLSearchParams()
+                        params.set('userId', data.userId)
+                        if (data.statementId) params.set('statementId', data.statementId)
+
+                        return await $fetch(`/tenancy/permission/contexts?${params}`, {
+                            method: 'GET',
+                            ...fetchOptions,
+                        })
+                    },
+
                     grantBatch: async (
                         data: {
                             grants: Array<{

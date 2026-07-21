@@ -5,7 +5,11 @@ import type { PermissionGrant, PermissionDeny } from '../schema'
 import type { ContextType } from '../types/context'
 import type { StatementId } from '../types/statement'
 import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession } from './middleware'
+import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
+import {
+  ok, created, noContent, okArray, okBatch,
+  permissionGrantSchema, permissionDenySchema, permissionCheckSchema, permissionContextSchema,
+} from './openapi'
 
 /**
  * Find permission (grant or deny) and determine its context
@@ -90,6 +94,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Grant permission',
           description: 'Grant explicit permission to a user (requires authentication)',
+          responses: created(permissionGrantSchema, 'Permission granted'),
         },
       },
     },
@@ -175,6 +180,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Deny permission',
           description: 'Deny explicit permission to a user (requires authentication)',
+          responses: created(permissionDenySchema, 'Permission denied'),
         },
       },
     },
@@ -240,6 +246,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Revoke permission',
           description: 'Revoke a grant or deny (requires authentication)',
+          responses: noContent('Permission revoked'),
         },
       },
     },
@@ -298,6 +305,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Check permission',
           description: 'Check if user has permission',
+          responses: ok(permissionCheckSchema, 'Permission evaluation result'),
         },
       },
     },
@@ -430,6 +438,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List grants',
           description: 'List all grants for a user',
+          responses: okArray(permissionGrantSchema, 'The user\'s grants'),
         },
       },
     },
@@ -469,6 +478,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'List denies',
           description: 'List all denies for a user',
+          responses: okArray(permissionDenySchema, 'The user\'s denies'),
         },
       },
     },
@@ -495,6 +505,126 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
     }
   ),
 
+  listPermissionContexts: createAuthEndpoint(
+    '/tenancy/permission/contexts',
+    {
+      method: 'GET',
+      query: z.object({
+        userId: z.string(),
+        // If provided, only return contexts where this permission resolves to allowed
+        statementId: z.string().optional(),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'List permission contexts',
+          description:
+            'List the contexts (organizations/teams) a user has access to, with their hierarchy (parentType/parentId). Self-only by default; the permission.contexts hook is the admin override for cross-user lookups.',
+          responses: ok(
+            {
+              type: 'object',
+              properties: { contexts: { type: 'array', items: permissionContextSchema } },
+              required: ['contexts'],
+            },
+            'Contexts the user has access to',
+          ),
+        },
+      },
+    },
+    async (ctx) => {
+      const session = await requireSession(ctx)
+      const { userId, statementId } = ctx.query
+
+      // Subject lookup: self by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.permission?.contexts, ctx, session)
+
+      // Gather distinct contexts the user relates to directly: memberships + grants
+      const [members, grants] = await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'member',
+          where: [{ field: 'userId', value: userId }],
+        }) as Promise<any[]>,
+        ctx.context.adapter.findMany({
+          model: 'permissionGrant',
+          where: [{ field: 'userId', value: userId }],
+        }) as Promise<PermissionGrant[]>,
+      ])
+
+      type ContextSource = 'role' | 'membership' | 'grant'
+      const seen = new Map<string, { contextType: ContextType; contextId: string; source: ContextSource; roleId?: string }>()
+      for (const m of members) {
+        seen.set(`${m.contextType}:${m.contextId}`, {
+          contextType: m.contextType,
+          contextId: m.contextId,
+          // A bare membership (no role) confers no role-derived permissions
+          source: m.roleId ? 'role' : 'membership',
+          roleId: m.roleId ?? undefined,
+        })
+      }
+      const now = new Date()
+      for (const g of grants) {
+        // Skip expired grants: they confer no access (matches _checkPermission)
+        if (g.expiresAt && new Date(g.expiresAt) < now) continue
+        const key = `${g.contextType}:${g.contextId}`
+        if (!seen.has(key)) {
+          seen.set(key, { contextType: g.contextType, contextId: g.contextId, source: 'grant' })
+        }
+      }
+
+      // Optional filter: keep only contexts where the given permission resolves to allowed
+      let entries = [...seen.values()]
+      if (statementId) {
+        const results = await Promise.all(entries.map((entry) =>
+          _checkPermission(ctx.context.adapter, {
+            userId,
+            statementId,
+            contextType: entry.contextType,
+            contextId: entry.contextId,
+          }, config)
+        ))
+        entries = entries.filter((_, i) => results[i].allowed)
+      }
+
+      // Batch-fetch names + hierarchy: one query per model instead of one per context
+      const orgIds = entries.filter((e) => e.contextType === 'organization').map((e) => e.contextId)
+      const teamIds = entries.filter((e) => e.contextType === 'team').map((e) => e.contextId)
+      const [orgs, teams] = await Promise.all([
+        orgIds.length
+          ? ctx.context.adapter.findMany({ model: 'organization', where: [{ field: 'id', operator: 'in', value: orgIds }] }) as Promise<any[]>
+          : Promise.resolve([]),
+        teamIds.length
+          ? ctx.context.adapter.findMany({ model: 'team', where: [{ field: 'id', operator: 'in', value: teamIds }] }) as Promise<any[]>
+          : Promise.resolve([]),
+      ])
+      const orgById = new Map(orgs.map((o) => [o.id, o]))
+      const teamById = new Map(teams.map((t) => [t.id, t]))
+
+      const contexts: Array<{
+        contextType: ContextType
+        contextId: string
+        name: string
+        parentType: ContextType | null
+        parentId: string | null
+        source: ContextSource
+        roleId?: string
+      }> = []
+
+      for (const entry of entries) {
+        const record = entry.contextType === 'organization'
+          ? orgById.get(entry.contextId)
+          : teamById.get(entry.contextId)
+        if (!record) continue
+        contexts.push({
+          ...entry,
+          name: record.name,
+          parentType: record.parentType ?? null,
+          parentId: record.parentId ?? null,
+        })
+      }
+
+      return ctx.json({ contexts })
+    }
+  ),
+
   grantBatch: createAuthEndpoint(
     '/tenancy/permission/grant-batch',
     {
@@ -512,6 +642,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Batch grant permissions',
           description: 'Grant multiple permissions at once (requires authentication)',
+          responses: okBatch(permissionGrantSchema, 'Batch grant result'),
         },
       },
     },
@@ -616,6 +747,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         openapi: {
           summary: 'Batch deny permissions',
           description: 'Deny multiple permissions at once (requires authentication)',
+          responses: okBatch(permissionDenySchema, 'Batch deny result'),
         },
       },
     },

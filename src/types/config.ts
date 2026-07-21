@@ -201,6 +201,12 @@ export interface EndpointConfig {
     check?: EndpointAuthHook
     listGrants?: EndpointAuthHook
     listDenies?: EndpointAuthHook
+    /**
+     * Override for listing another user's permission contexts
+     * (listPermissionContexts). Self-lookups are always allowed. Undefined =
+     * self-only (fail-closed). Must throw to deny.
+     */
+    contexts?: EndpointAuthHook
     grantBatch?: EndpointAuthHook
     denyBatch?: EndpointAuthHook
   }
