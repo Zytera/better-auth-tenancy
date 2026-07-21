@@ -17,7 +17,8 @@ export { statementEndpoints } from './statements'
 export { roleEndpoints } from './roles'
 export { memberEndpoints } from './members'
 export { invitationEndpoints } from './invitations'
-export { permissionEndpoints } from './permissions'
+export { permissionEndpoints, resolvePermission, requirePermission } from './permissions'
+export type { ResolvePermissionResult } from './permissions'
 
 // Export middleware utilities
 export { requireSession, applyEndpointAuth } from './middleware'

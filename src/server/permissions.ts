@@ -314,114 +314,14 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
 
       const { userId, statementId, contextType, contextId } = ctx.body
 
-      // 1. Check deny (highest priority)
-      const denies = await ctx.context.adapter.findMany({
-        model: 'permissionDeny',
-        where: [
-          { field: 'userId', value: userId },
-          { field: 'statementId', value: statementId },
-          { field: 'contextType', value: contextType },
-          { field: 'contextId', value: contextId },
-        ],
-      }) as PermissionDeny[]
+      const result = await resolvePermission(ctx.context.adapter, {
+        userId,
+        statementId: statementId as StatementId,
+        contextType,
+        contextId,
+      }, config)
 
-      if (denies.length > 0) {
-        return ctx.json({
-          allowed: false,
-          reason: 'Explicit deny',
-          details: { source: 'deny' },
-        })
-      }
-
-      // 2. Check grant (second priority)
-      const grants = await ctx.context.adapter.findMany({
-        model: 'permissionGrant',
-        where: [
-          { field: 'userId', value: userId },
-          { field: 'statementId', value: statementId },
-          { field: 'contextType', value: contextType },
-          { field: 'contextId', value: contextId },
-        ],
-      }) as PermissionGrant[]
-
-      if (grants.length > 0) {
-        const grant = grants[0]
-        if (!grant) {
-          return ctx.json({
-            allowed: false,
-            reason: 'No permission found',
-            details: { source: 'none' },
-          })
-        }
-        // Check expiration
-        if (grant.expiresAt && new Date(grant.expiresAt) < new Date()) {
-          return ctx.json({
-            allowed: false,
-            reason: 'Grant expired',
-            details: { source: 'grant', expired: true },
-          })
-        }
-        return ctx.json({
-          allowed: true,
-          reason: 'Explicit grant',
-          details: { source: 'grant' },
-        })
-      }
-
-      // 3. Check role (third priority)
-      const members = await ctx.context.adapter.findMany({
-        model: 'member',
-        where: [
-          { field: 'userId', value: userId },
-          { field: 'contextType', value: contextType },
-          { field: 'contextId', value: contextId },
-        ],
-      }) as any[]
-      const member = members[0]
-
-      if (member && member.roleId) {
-        const roleStatements = await ctx.context.adapter.findMany({
-          model: 'roleStatement',
-          where: [{ field: 'roleId', value: member.roleId }],
-        }) as any[]
-        const statementIds = roleStatements.map((rs: any) => rs.statementId)
-        if (statementIds.includes(statementId)) {
-          return ctx.json({
-            allowed: true,
-            reason: 'Role permission',
-            details: { source: 'role', roleId: member.roleId },
-          })
-        }
-      }
-
-      // 4. Check parent context (hierarchy inheritance)
-      let parent: { type: ContextType; id: string } | null = null
-
-      if (contextType === 'team') {
-        const team = await ctx.context.adapter.findOne({
-          model: 'team',
-          where: [{ field: 'id', value: contextId }],
-        }) as any
-        if (team) {
-          parent = { type: team.parentType, id: team.parentId }
-        }
-      }
-
-      if (parent) {
-        return _checkPermission(ctx.context.adapter, {
-          userId,
-          statementId,
-          contextType: parent.type,
-          contextId: parent.id,
-        }, config)
-      }
-
-      // No permission found
-      return ctx.json({
-        allowed: false,
-        reason: 'No permission found',
-        details: { source: 'none' },
-      })
+      return ctx.json(result)
     }
   ),
 
@@ -613,6 +513,10 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Optional filter: keep only contexts where the given permission resolves to allowed
+      // ponytail: O(entries × chain-depth) — each resolve re-climbs the parent chain
+      // this walk already traversed. Fine at current scale (short chains, resolves
+      // usually short-circuit at/near the entry). Upgrade path if it bites: thread
+      // the already-loaded ancestor map into resolvePermission instead of re-querying.
       if (statementId) {
         const results = await Promise.all(entries.map((entry) =>
           _checkPermission(ctx.context.adapter, {
@@ -622,7 +526,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
             contextId: entry.contextId,
           }, config)
         ))
-        entries = entries.filter((_, i) => results[i].allowed)
+        entries = entries.filter((_, i) => results[i]!.allowed)
       }
 
       // Batch-fetch names + hierarchy: one query per model instead of one per context
@@ -888,13 +792,33 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
   ),
 })
 
-// Helper function for recursive permission checking
-async function _checkPermission(
+export interface ResolvePermissionResult {
+  allowed: boolean
+  reason: string
+  details: Record<string, any>
+}
+
+/**
+ * Public permission resolver. Single source of truth for authorization:
+ * deny > grant > role > parent context (recursive up the hierarchy).
+ *
+ * Reuse this in endpoint/filtering hooks instead of reimplementing the
+ * resolution by hand — hand copies drift and only resolve grants.
+ */
+export async function resolvePermission(
   adapter: Adapter,
   input: CheckPermissionInput,
-  config?: TenancyConfig
-): Promise<any> {
-  // 1. Check deny
+  config?: TenancyConfig,
+  // ponytail: visited set guards cyclic/self-referential parentId chains
+  visited: Set<string> = new Set()
+): Promise<ResolvePermissionResult> {
+  const key = `${input.contextType}:${input.contextId}`
+  if (visited.has(key)) {
+    return { allowed: false, reason: 'No permission found', details: { source: 'none', cycle: true } }
+  }
+  visited.add(key)
+
+  // 1. Check deny — always wins, never climbs
   const denies = await adapter.findMany({
     model: 'permissionDeny',
     where: [
@@ -906,14 +830,11 @@ async function _checkPermission(
   }) as PermissionDeny[]
 
   if (denies.length > 0) {
-    return {
-      allowed: false,
-      reason: 'Explicit deny',
-      details: { source: 'deny' },
-    }
+    return { allowed: false, reason: 'Explicit deny', details: { source: 'deny' } }
   }
 
-  // 2. Check grant
+  // 2. Check grant — any non-expired grant among the rows counts; an
+  // expired grant must NOT short-circuit the role/parent fallback.
   const grants = await adapter.findMany({
     model: 'permissionGrant',
     where: [
@@ -924,20 +845,15 @@ async function _checkPermission(
     ],
   }) as PermissionGrant[]
 
-  if (grants.length > 0) {
-    const grant = grants[0]!
-    if (grant.expiresAt && new Date(grant.expiresAt) < new Date()) {
-      return {
-        allowed: false,
-        reason: 'Grant expired',
-        details: { source: 'grant', expired: true },
-      }
-    }
-    return {
-      allowed: true,
-      reason: 'Explicit grant',
-      details: { source: 'grant' },
-    }
+  const now = new Date()
+  let sawExpiredGrant = false
+  const hasValidGrant = grants.some(g => {
+    const valid = !g.expiresAt || new Date(g.expiresAt) >= now
+    if (!valid) sawExpiredGrant = true
+    return valid
+  })
+  if (hasValidGrant) {
+    return { allowed: true, reason: 'Explicit grant', details: { source: 'grant' } }
   }
 
   // 3. Check role
@@ -958,11 +874,7 @@ async function _checkPermission(
     }) as any[]
     const statementIds = roleStatements.map((rs: any) => rs.statementId)
     if (statementIds.includes(input.statementId)) {
-      return {
-        allowed: true,
-        reason: 'Role permission',
-        details: { source: 'role', roleId: member.roleId },
-      }
+      return { allowed: true, reason: 'Role permission', details: { source: 'role', roleId: member.roleId } }
     }
   }
 
@@ -979,19 +891,64 @@ async function _checkPermission(
     }
   }
 
-  if (parent) {
-    return _checkPermission(adapter, {
-      userId: input.userId,
-      statementId: input.statementId,
-      contextType: parent.type,
-      contextId: parent.id,
-    }, config)
-  }
+  const result: ResolvePermissionResult = parent
+    ? await resolvePermission(adapter, {
+        userId: input.userId,
+        statementId: input.statementId,
+        contextType: parent.type,
+        contextId: parent.id,
+      }, config, visited)
+    : { allowed: false, reason: 'No permission found', details: { source: 'none' } }
 
-  return {
-    allowed: false,
-    reason: 'No permission found',
-    details: { source: 'none' },
+  // Preserve the "an expired grant existed here" signal so clients can still
+  // prompt to renew it, even though the expired grant no longer denies access.
+  if (!result.allowed && result.details.source === 'none' && sawExpiredGrant) {
+    result.details.expired = true
+  }
+  return result
+}
+
+// Internal alias kept for existing call sites
+const _checkPermission = resolvePermission
+
+/**
+ * Reusable authorization hook: assert the current user holds `statementId`
+ * in the request's context, throwing APIError('FORBIDDEN') otherwise.
+ *
+ * Drop into config as an endpoint auth hook so consumers stop hand-rolling
+ * resolution per endpoint. contextType/contextId are read from the request
+ * (body → query → params); the user comes from the session.
+ *
+ * @example
+ * tenancy({ endpoints: { team: { create: requirePermission('team:create') } } })
+ */
+export function requirePermission(statementId: StatementId) {
+  return async ({ ctx, session }: { ctx: any; session?: any }): Promise<void> => {
+    const s = session ?? await requireSession(ctx)
+    // URL params win over caller-controlled body/query: the endpoint acts on
+    // the params-keyed resource, so authorize against that, not a spoofable body.
+    const src = { ...ctx.body, ...ctx.query, ...ctx.params }
+    const contextType = src.contextType as ContextType
+    const contextId = src.contextId as string
+
+    if (!contextType || !contextId) {
+      throw new APIError('BAD_REQUEST', {
+        message: 'contextType and contextId are required to authorize this request.',
+      })
+    }
+
+    const { allowed } = await resolvePermission(ctx.context.adapter, {
+      userId: s.user.id,
+      statementId,
+      contextType,
+      contextId,
+    })
+
+    if (!allowed) {
+      throw new APIError('FORBIDDEN', {
+        message: `Missing permission: ${statementId}`,
+      })
+    }
   }
 }
 
