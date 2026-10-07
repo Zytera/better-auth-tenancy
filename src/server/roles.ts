@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { Role } from '../schema'
+import type { Role, RoleTranslation } from '../schema'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import type { StatementId } from '../types'
 import { applyEndpointAuth, requireSession } from './middleware'
@@ -57,6 +57,11 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         name: z.string().min(1).max(100),
         description: z.string().optional(),
         statements: z.array(z.string()).optional(),
+        translations: z.array(z.object({
+          locale: z.string(),
+          name: z.string(),
+          description: z.string().optional(),
+        })).optional(),
       }),
       metadata: {
         openapi: {
@@ -72,7 +77,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       await applyEndpointAuth(config?.endpoints?.role?.create, ctx, session)
 
-      const { contextType, contextId, name, description, statements } = ctx.body
+      const { contextType, contextId, name, description, statements, translations } = ctx.body
 
       const maxRoles = contextType === 'organization'
         ? config?.limits?.maxRolesPerOrganization
@@ -117,10 +122,17 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         for (const sid of statements) {
           await ctx.context.adapter.create({
             model: 'roleStatement',
-            data: {
-              roleId: role.id,
-              statementId: sid,
-            },
+            data: { roleId: role.id, statementId: sid },
+          })
+        }
+      }
+
+      // Add translations
+      if (translations) {
+        for (const t of translations) {
+          await ctx.context.adapter.create({
+            model: 'roleTranslation',
+            data: { roleId: role.id, locale: t.locale, name: t.name, description: t.description },
           })
         }
       }
@@ -174,6 +186,20 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       }, session)
 
       const role = resource.data as Role
+
+      // Fetch role translation
+      const preferredLocale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      let roleTranslations = await ctx.context.adapter.findMany({
+        model: 'roleTranslation',
+        where: [{ field: 'roleId', value: role.id }, { field: 'locale', value: preferredLocale }],
+      }) as RoleTranslation[]
+      if (roleTranslations.length === 0 && preferredLocale !== 'en') {
+        roleTranslations = await ctx.context.adapter.findMany({
+          model: 'roleTranslation',
+          where: [{ field: 'roleId', value: role.id }, { field: 'locale', value: 'en' }],
+        }) as RoleTranslation[]
+      }
+      const roleTranslation = roleTranslations[0]
 
       // Fetch role-statement relations
       const roleStatements = await ctx.context.adapter.findMany({
@@ -235,6 +261,10 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       return ctx.json({
         ...role,
+        ...(roleTranslation ? {
+          name: roleTranslation.name,
+          ...(roleTranslation.description != null ? { description: roleTranslation.description } : {}),
+        } : {}),
         statements,
         statementCount: statements.length,
       })
@@ -362,11 +392,17 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      // Delete role statements
-      await ctx.context.adapter.delete({
-        model: 'roleStatement',
-        where: [{ field: 'roleId', value: id }],
-      })
+      // Delete role statements and translations
+      await Promise.all([
+        ctx.context.adapter.delete({
+          model: 'roleStatement',
+          where: [{ field: 'roleId', value: id }],
+        }),
+        ctx.context.adapter.delete({
+          model: 'roleTranslation',
+          where: [{ field: 'roleId', value: id }],
+        }),
+      ])
 
       // Delete the role
       await ctx.context.adapter.delete({
@@ -415,19 +451,36 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const where = [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }]
 
-      // Execute findMany and count in parallel for better performance
-      const [items, total] = await Promise.all([
-        ctx.context.adapter.findMany({
-          model: 'role',
-          where,
-          limit,
-          offset,
-        }) as Promise<Role[]>,
-        ctx.context.adapter.count({
-          model: 'role',
-          where,
-        })
-      ])
+      // ponytail: adapter has no count(); fetch all (max 30 roles/context) then slice
+      const allRoles = await ctx.context.adapter.findMany({
+        model: 'role',
+        where,
+      }) as Role[]
+      const total = allRoles.length
+      const rawItems = allRoles.slice(offset, offset + limit) as Role[]
+
+      // Apply role translations
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleIds = rawItems.map(r => r.id)
+      let roleTranslations: RoleTranslation[] = await ctx.context.adapter.findMany({
+        model: 'roleTranslation',
+        where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: locale }],
+      }) as RoleTranslation[]
+      if (roleTranslations.length === 0 && locale !== 'en') {
+        roleTranslations = await ctx.context.adapter.findMany({
+          model: 'roleTranslation',
+          where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: 'en' }],
+        }) as RoleTranslation[]
+      }
+      const roleTranslationMap = new Map(roleTranslations.map(t => [t.roleId, t]))
+      const items = rawItems.map(r => {
+        const t = roleTranslationMap.get(r.id)
+        return t ? {
+          ...r,
+          name: t.name,
+          ...(t.description != null ? { description: t.description } : {}),
+        } : r
+      })
 
       // Conditionally enrich roles with their statements
       if (includeStatements) {
@@ -584,6 +637,56 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       }
 
       return ctx.json(null, { status: 201 })
+    }
+  ),
+
+  setRoleTranslations: createAuthEndpoint(
+    '/tenancy/role/translations/set',
+    {
+      method: 'POST',
+      body: z.object({
+        id: z.string(),
+        translations: z.array(z.object({
+          locale: z.string(),
+          name: z.string(),
+          description: z.string().optional(),
+        })),
+      }),
+      metadata: {
+        openapi: {
+          summary: 'Set role translations',
+          description: 'Replace all translations for a role (requires authentication)',
+          responses: noContent('Translations updated'),
+        },
+      },
+    },
+    async (ctx) => {
+      const session = await requireSession(ctx)
+      const { id, translations } = ctx.body
+
+      const resource = await findRoleContext(ctx.context.adapter, id)
+      if (!resource) {
+        const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+        throw new APIError('NOT_FOUND', {
+          message: getErrorMessage('role.not_found', locale, undefined, config?.i18n?.errorMessages)
+        })
+      }
+
+      await applyEndpointAuth(config?.endpoints?.role?.update, { ...ctx, resource }, session)
+
+      // Replace all translations for this role
+      await ctx.context.adapter.delete({
+        model: 'roleTranslation',
+        where: [{ field: 'roleId', value: id }],
+      })
+      for (const t of translations) {
+        await ctx.context.adapter.create({
+          model: 'roleTranslation',
+          data: { roleId: id, locale: t.locale, name: t.name, description: t.description },
+        })
+      }
+
+      return ctx.json(null, { status: 204 })
     }
   ),
 

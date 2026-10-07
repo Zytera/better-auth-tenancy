@@ -638,14 +638,24 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Subject lookup: self by default, dedicated hook is the admin override
       await requireSelfOr(userId === session.user.id, config?.endpoints?.member?.getMemberships, ctx, session)
 
-      const members = await ctx.context.adapter.findMany({
-        model: 'member',
-        where: [
-          { field: 'userId', value: userId },
-          { field: 'contextType', value: contextType },
-          { field: 'contextId', value: contextId },
-        ],
-      }) as Member[]
+      // ponytail: wrap adapter here specifically — service keys call this endpoint
+      // for cross-user checks; a transient DB error should be 503 (retryable),
+      // not 500 (fatal), so the Go SDK can distinguish and retry.
+      let members: Member[]
+      try {
+        members = await ctx.context.adapter.findMany({
+          model: 'member',
+          where: [
+            { field: 'userId', value: userId },
+            { field: 'contextType', value: contextType },
+            { field: 'contextId', value: contextId },
+          ],
+        }) as Member[]
+      } catch {
+        throw new APIError('SERVICE_UNAVAILABLE', {
+          message: 'Membership check temporarily unavailable. Please retry.',
+        })
+      }
 
       return ctx.json({ isMember: members.length > 0 })
     }

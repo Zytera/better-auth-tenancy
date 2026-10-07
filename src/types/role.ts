@@ -1,10 +1,19 @@
 import type { StatementId } from './statement'
 import type { ContextType } from './context'
 
-/**
- * Role type - distinguishes between organization and team roles
- */
 export type RoleType = 'organization' | 'team'
+
+export interface RoleTranslationData {
+  locale: string
+  name: string
+  description?: string
+}
+
+export interface RoleTranslationInput {
+  locale: string
+  name: string
+  description?: string
+}
 
 /**
  * Role with statements

@@ -19,6 +19,7 @@ import { statementSchema, statementTranslationSchema } from './statement.schema'
 import {
   roleSchema,
   roleStatementSchema,
+  roleTranslationSchema,
 } from './role.schema'
 import { memberSchema } from './member.schema'
 import { permissionGrantSchema, permissionDenySchema } from './permission.schema'
@@ -50,8 +51,10 @@ export {
 export {
   roleSchema,
   roleStatementSchema,
+  roleTranslationSchema,
   type Role,
   type RoleStatement,
+  type RoleTranslation,
 } from './role.schema'
 
 // Memberships
@@ -98,6 +101,7 @@ export const allSchemas = [
   // Custom Roles
   roleSchema,
   roleStatementSchema,
+  roleTranslationSchema,
 
   // Memberships
   memberSchema,

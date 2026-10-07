@@ -22,7 +22,17 @@ import type { EndpointAuthHook, EndpointAuthContext } from '../types/config'
  * ```
  */
 export async function requireSession(ctx: any) {
-  const session = await getSessionFromCtx(ctx)
+  // ponytail: catch here because getSessionFromCtx can throw (not just return null)
+  // when better-auth rejects an invalid/expired token internally — that throw would
+  // otherwise surface as a 500 instead of 401.
+  let session: any
+  try {
+    session = await getSessionFromCtx(ctx)
+  } catch {
+    throw new APIError('UNAUTHORIZED', {
+      message: 'Authentication required. Please provide valid credentials.',
+    })
+  }
 
   if (!session || !session.user) {
     throw new APIError('UNAUTHORIZED', {

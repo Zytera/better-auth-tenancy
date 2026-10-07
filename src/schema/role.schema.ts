@@ -1,10 +1,6 @@
 import * as z from 'zod'
 import { generateId } from 'better-auth'
 
-/**
- * Role schema - Unified custom roles with contextType/contextId pattern
- * Supports organization and team roles in a single model
- */
 export const roleSchema = z.object({
   id: z.string().default(generateId),
   contextType: z.enum(['organization', 'team']),
@@ -15,10 +11,6 @@ export const roleSchema = z.object({
   updatedAt: z.date().default(() => new Date()),
 })
 
-/**
- * Role Statement schema - Many-to-many relationship
- * Links roles to their permissions (statements)
- */
 export const roleStatementSchema = z.object({
   id: z.string().default(generateId),
   roleId: z.string(),
@@ -26,5 +18,15 @@ export const roleStatementSchema = z.object({
   createdAt: z.date().default(() => new Date()),
 })
 
+export const roleTranslationSchema = z.object({
+  id: z.string().default(generateId),
+  roleId: z.string(),
+  locale: z.string(),
+  name: z.string(),
+  description: z.string().nullish(),
+  createdAt: z.date().default(() => new Date()),
+})
+
 export type Role = z.infer<typeof roleSchema>
 export type RoleStatement = z.infer<typeof roleStatementSchema>
+export type RoleTranslation = z.infer<typeof roleTranslationSchema>
