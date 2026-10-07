@@ -124,6 +124,16 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
           createdAt: { type: 'date', required: true },
         },
       },
+      roleTranslation: {
+        fields: {
+          id: { type: 'string', required: true },
+          roleId: { type: 'string', required: true, references: { model: 'role', field: 'id' } },
+          locale: { type: 'string', required: true },
+          name: { type: 'string', required: true },
+          description: { type: 'string', required: false },
+          createdAt: { type: 'date', required: true },
+        },
+      },
       // Members
       member: {
         fields: {
