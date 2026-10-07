@@ -415,19 +415,13 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
 
       const where = [{ field: 'contextType', value: contextType }, { field: 'contextId', value: contextId }]
 
-      // Execute findMany and count in parallel for better performance
-      const [items, total] = await Promise.all([
-        ctx.context.adapter.findMany({
-          model: 'role',
-          where,
-          limit,
-          offset,
-        }) as Promise<Role[]>,
-        ctx.context.adapter.count({
-          model: 'role',
-          where,
-        })
-      ])
+      // ponytail: adapter has no count(); fetch all (max 30 roles/context) then slice
+      const allRoles = await ctx.context.adapter.findMany({
+        model: 'role',
+        where,
+      }) as Role[]
+      const total = allRoles.length
+      const items = allRoles.slice(offset, offset + limit) as Role[]
 
       // Conditionally enrich roles with their statements
       if (includeStatements) {
