@@ -583,7 +583,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       ) as any[][]
       const translationMap = new Map<string, any>()
       for (let i = 0; i < roleIds.length; i++) {
-        translationMap.set(roleIds[i], allTranslations[i * 2][0] ?? allTranslations[i * 2 + 1][0] ?? null)
+        translationMap.set(roleIds[i]!, allTranslations[i * 2]?.[0] ?? allTranslations[i * 2 + 1]?.[0] ?? null)
       }
 
       const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
