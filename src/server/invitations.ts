@@ -13,7 +13,7 @@ import {
   calculateExpirationDate,
 } from '../utils/invitation-helper'
 import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper'
 import { ok, created, okList, okArray, invitationEnrichedSchema } from './openapi'
 
 export async function findInvitationContext(
@@ -183,6 +183,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token: _, invitedBy: __, roleId: ___, ...safeInvitation } = invitation
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         ...safeInvitation,
         invitedByUser: invitedByUser ? {
@@ -192,8 +195,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         } : null,
         role: role ? {
           id: role.id,
-          name: role.name,
-          description: role.description,
+          name: roleTranslation?.name ?? role.name,
+          description: roleTranslation?.description ?? role.description,
         } : null,
       }, { status: 201 })
     }
@@ -249,6 +252,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token, invitedBy, roleId, ...safeInvitation } = invitation
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         ...safeInvitation,
         invitedByUser: invitedByUser ? {
@@ -258,8 +264,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         } : null,
         role: role ? {
           id: role.id,
-          name: role.name,
-          description: role.description,
+          name: roleTranslation?.name ?? role.name,
+          description: roleTranslation?.description ?? role.description,
         } : null,
       })
     }
@@ -319,6 +325,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token, invitedBy, roleId, ...safeInvitation } = invitation
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         ...safeInvitation,
         invitedByUser: invitedByUser ? {
@@ -328,8 +337,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         } : null,
         role: role ? {
           id: role.id,
-          name: role.name,
-          description: role.description,
+          name: roleTranslation?.name ?? role.name,
+          description: roleTranslation?.description ?? role.description,
         } : null,
       })
     }
@@ -447,6 +456,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token: _token, invitedBy, roleId: _roleId, ...safeInvitation } = updated
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         invitation: {
           ...safeInvitation,
@@ -457,8 +469,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           } : null,
           role: role ? {
             id: role.id,
-            name: role.name,
-            description: role.description,
+            name: roleTranslation?.name ?? role.name,
+            description: roleTranslation?.description ?? role.description,
           } : null,
         }
       })
@@ -559,6 +571,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token: _token, invitedBy, roleId: _roleId, ...safeInvitation } = updated
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         ...safeInvitation,
         invitedByUser: invitedByUser ? {
@@ -568,8 +583,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         } : null,
         role: role ? {
           id: role.id,
-          name: role.name,
-          description: role.description,
+          name: roleTranslation?.name ?? role.name,
+          description: roleTranslation?.description ?? role.description,
         } : null,
       })
     }
@@ -672,6 +687,9 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
       const { token, invitedBy, roleId, ...safeInvitation } = updated
 
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
+
       return ctx.json({
         ...safeInvitation,
         invitedByUser: invitedByUser ? {
@@ -681,8 +699,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         } : null,
         role: role ? {
           id: role.id,
-          name: role.name,
-          description: role.description,
+          name: roleTranslation?.name ?? role.name,
+          description: roleTranslation?.description ?? role.description,
         } : null,
       })
     }
@@ -759,10 +777,23 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const roles = await Promise.all(rolesPromises) as any[]
       const roleMap = new Map(roles.filter(Boolean).map(r => [r.id, r]))
 
+      // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const [localeTs, enTs] = roleIds.length > 0 ? await Promise.all([
+        ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: locale }] }).catch(() => []),
+        locale !== 'en'
+          ? ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: 'en' }] }).catch(() => [])
+          : Promise.resolve([]),
+      ]) as any[][] : [[], []]
+      const localeMap = new Map<string, any>(localeTs.map((t: any) => [t.roleId, t]))
+      const enMap = new Map<string, any>(enTs.map((t: any) => [t.roleId, t]))
+      const translationMap = new Map<string, any>(roleIds.map(id => [id, localeMap.get(id) ?? enMap.get(id) ?? null]))
+
       // Enrich invitations with cached user and role data
       const enrichedItems = items.map((invitation) => {
         const invitedByUser = userMap.get(invitation.invitedBy)
         const role = invitation.roleId ? roleMap.get(invitation.roleId) : null
+        const t = invitation.roleId ? translationMap.get(invitation.roleId) : null
 
         // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
         const { token, invitedBy, roleId, ...safeInvitation } = invitation
@@ -776,8 +807,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           } : null,
           role: role ? {
             id: role.id,
-            name: role.name,
-            description: role.description,
+            name: t?.name ?? role.name,
+            description: t?.description ?? role.description,
           } : null,
         }
       })
@@ -850,10 +881,23 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         roles.filter(Boolean).forEach(r => roleMap.set(r.id, r))
       }
 
+      // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
+      const [localeTs, enTs] = allRoleIds.length > 0 ? await Promise.all([
+        ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: allRoleIds }, { field: 'locale', value: locale }] }).catch(() => []),
+        locale !== 'en'
+          ? ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: allRoleIds }, { field: 'locale', value: 'en' }] }).catch(() => [])
+          : Promise.resolve([]),
+      ]) as any[][] : [[], []]
+      const localeMap = new Map<string, any>(localeTs.map((t: any) => [t.roleId, t]))
+      const enMap = new Map<string, any>(enTs.map((t: any) => [t.roleId, t]))
+      const translationMap = new Map<string, any>(allRoleIds.map(id => [id, localeMap.get(id) ?? enMap.get(id) ?? null]))
+
       // Enrich invitations with cached user and role data
       const enrichedInvitations = invitations.map((invitation) => {
         const invitedByUser = userMap.get(invitation.invitedBy)
         const role = invitation.roleId ? roleMap.get(invitation.roleId) : null
+        const t = invitation.roleId ? translationMap.get(invitation.roleId) : null
 
         // Remove duplicate fields (token, invitedBy, roleId) - keep only enriched objects
         const { token, invitedBy, roleId, ...safeInvitation } = invitation
@@ -867,8 +911,8 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           } : null,
           role: role ? {
             id: role.id,
-            name: role.name,
-            description: role.description,
+            name: t?.name ?? role.name,
+            description: t?.description ?? role.description,
           } : null,
         }
       })

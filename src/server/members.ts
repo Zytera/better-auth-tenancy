@@ -6,24 +6,11 @@ import type { ContextType } from '../types/context'
 import type { TenancyConfig, ResourceContext } from '../types/config'
 import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
 import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders } from '../utils/locale-helper'
+import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper'
 import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSchema } from './openapi'
 
 export type { Member } from '../schema'
 
-async function resolveTranslation(adapter: Adapter, roleId: string, locale: string): Promise<any | null> {
-  const ts = await adapter.findMany({
-    model: 'roleTranslation',
-    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: locale }],
-  }).catch(() => []) as any[]
-  if (ts.length > 0) return ts[0]
-  if (locale === 'en') return null
-  const enTs = await adapter.findMany({
-    model: 'roleTranslation',
-    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: 'en' }],
-  }).catch(() => []) as any[]
-  return enTs[0] ?? null
-}
 
 /**
  * Find member and determine its context (organization or team)
@@ -158,7 +145,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
-      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
 
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId: _, roleId: __, ...memberWithoutDuplicates } = member
@@ -215,7 +202,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
-      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
 
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId, roleId, ...memberWithoutDuplicates } = memberData
@@ -297,7 +284,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null)
       ]) as [any, any]
 
-      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
 
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId, roleId: _, ...memberWithoutDuplicates } = updated
@@ -362,7 +349,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
-      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+      const roleTranslation = role ? await resolveRoleTranslation(ctx.context.adapter, role.id, locale) : null
 
       const { userId, roleId, ...memberWithoutDuplicates } = updated
       return ctx.json({
@@ -565,26 +552,24 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         ))
       ]) as [any[], any[]]
 
-      // Batch fetch translations (locale + 'en' fallback) for all roles in parallel
-      const needFallback = locale !== 'en'
-      const allTranslations = await Promise.all(
-        roleIds.flatMap(id => [
-          ctx.context.adapter.findMany({
-            model: 'roleTranslation',
-            where: [{ field: 'roleId', value: id }, { field: 'locale', value: locale }],
-          }).catch(() => []),
-          needFallback
-            ? ctx.context.adapter.findMany({
-                model: 'roleTranslation',
-                where: [{ field: 'roleId', value: id }, { field: 'locale', value: 'en' }],
-              }).catch(() => [])
-            : Promise.resolve([]),
-        ])
-      ) as any[][]
-      const translationMap = new Map<string, any>()
-      for (let i = 0; i < roleIds.length; i++) {
-        translationMap.set(roleIds[i]!, allTranslations[i * 2]?.[0] ?? allTranslations[i * 2 + 1]?.[0] ?? null)
-      }
+      // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
+      const [localeTs, enTs] = roleIds.length > 0 ? await Promise.all([
+        ctx.context.adapter.findMany({
+          model: 'roleTranslation',
+          where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: locale }],
+        }).catch(() => []),
+        locale !== 'en'
+          ? ctx.context.adapter.findMany({
+              model: 'roleTranslation',
+              where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: 'en' }],
+            }).catch(() => [])
+          : Promise.resolve([]),
+      ]) as any[][] : [[], []]
+      const localeMap = new Map<string, any>(localeTs.map((t: any) => [t.roleId, t]))
+      const enMap = new Map<string, any>(enTs.map((t: any) => [t.roleId, t]))
+      const translationMap = new Map<string, any>(
+        roleIds.map(id => [id, localeMap.get(id) ?? enMap.get(id) ?? null])
+      )
 
       const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
       const roleMap = new Map(roles.filter(Boolean).map(r => [r.id, r]))

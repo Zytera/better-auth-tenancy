@@ -1,3 +1,23 @@
+import type { Adapter } from 'better-auth'
+
+/**
+ * Fetch a role's translation for the given locale, falling back to 'en'.
+ * Returns null when no translation exists (caller should fall back to role.name/description).
+ */
+export async function resolveRoleTranslation(adapter: Adapter, roleId: string, locale: string): Promise<any | null> {
+  const ts = await adapter.findMany({
+    model: 'roleTranslation',
+    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: locale }],
+  }).catch(() => []) as any[]
+  if (ts.length > 0) return ts[0]
+  if (locale === 'en') return null
+  const enTs = await adapter.findMany({
+    model: 'roleTranslation',
+    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: 'en' }],
+  }).catch(() => []) as any[]
+  return enTs[0] ?? null
+}
+
 /**
  * Extract locale from request headers and return ISO alpha-2 code
  *
