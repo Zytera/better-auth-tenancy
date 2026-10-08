@@ -779,7 +779,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
       const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-      const [localeTs, enTs] = roleIds.length > 0 ? await Promise.all([
+      const [localeTs = [], enTs = []] = roleIds.length > 0 ? await Promise.all([
         ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: locale }] }).catch(() => []),
         locale !== 'en'
           ? ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: 'en' }] }).catch(() => [])
@@ -883,7 +883,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
 
       // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
       const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
-      const [localeTs, enTs] = allRoleIds.length > 0 ? await Promise.all([
+      const [localeTs = [], enTs = []] = allRoleIds.length > 0 ? await Promise.all([
         ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: allRoleIds }, { field: 'locale', value: locale }] }).catch(() => []),
         locale !== 'en'
           ? ctx.context.adapter.findMany({ model: 'roleTranslation', where: [{ field: 'roleId', operator: 'in', value: allRoleIds }, { field: 'locale', value: 'en' }] }).catch(() => [])

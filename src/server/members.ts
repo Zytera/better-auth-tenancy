@@ -553,7 +553,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       ]) as [any[], any[]]
 
       // Fetch translations for the relevant roleIds only (+ 'en' fallback) in 1–2 queries
-      const [localeTs, enTs] = roleIds.length > 0 ? await Promise.all([
+      const [localeTs = [], enTs = []] = roleIds.length > 0 ? await Promise.all([
         ctx.context.adapter.findMany({
           model: 'roleTranslation',
           where: [{ field: 'roleId', operator: 'in', value: roleIds }, { field: 'locale', value: locale }],
