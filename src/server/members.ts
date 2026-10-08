@@ -11,6 +11,20 @@ import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSc
 
 export type { Member } from '../schema'
 
+async function resolveTranslation(adapter: Adapter, roleId: string, locale: string): Promise<any | null> {
+  const ts = await adapter.findMany({
+    model: 'roleTranslation',
+    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: locale }],
+  }).catch(() => []) as any[]
+  if (ts.length > 0) return ts[0]
+  if (locale === 'en') return null
+  const enTs = await adapter.findMany({
+    model: 'roleTranslation',
+    where: [{ field: 'roleId', value: roleId }, { field: 'locale', value: 'en' }],
+  }).catch(() => []) as any[]
+  return enTs[0] ?? null
+}
+
 /**
  * Find member and determine its context (organization or team)
  * Single query to the unified member model
@@ -132,6 +146,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Enrich with user and role data in parallel for consistent response
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
@@ -143,13 +158,15 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
+      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId: _, roleId: __, ...memberWithoutDuplicates } = member
 
       return ctx.json({
         ...memberWithoutDuplicates,
         user: user ? { id: user.id, name: user.name, image: user.image } : null,
-        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        role: role ? { id: role.id, name: roleTranslation?.name ?? role.name, description: roleTranslation?.description ?? role.description } : null,
       }, { status: 201 })
     }
   ),
@@ -186,6 +203,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const memberData = resource.data as Member
 
       // Enrich with user and role data in parallel
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
@@ -197,15 +215,15 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
+      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId, roleId, ...memberWithoutDuplicates } = memberData
 
       return ctx.json({
         ...memberWithoutDuplicates,
-        // Project to the same safe fields as the other member endpoints — avoid
-        // leaking the full user row (email, plugin-added secrets, etc.)
         user: user ? { id: user.id, name: user.name, image: user.image } : null,
-        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        role: role ? { id: role.id, name: roleTranslation?.name ?? role.name, description: roleTranslation?.description ?? role.description } : null,
       })
     }
   ),
@@ -267,6 +285,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Enrich with user and role data in parallel for consistent response
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
@@ -278,13 +297,15 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null)
       ]) as [any, any]
 
+      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+
       // Remove duplicate fields (userId, roleId) - keep only enriched objects
       const { userId, roleId: _, ...memberWithoutDuplicates } = updated
 
       return ctx.json({
         ...memberWithoutDuplicates,
         user: user ? { id: user.id, name: user.name, image: user.image } : null,
-        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        role: role ? { id: role.id, name: roleTranslation?.name ?? role.name, description: roleTranslation?.description ?? role.description } : null,
       })
     }
   ),
@@ -329,6 +350,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }) as Member
 
       // Enrich with user and role data in parallel for consistent response
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
       const [user, role] = await Promise.all([
         ctx.context.adapter.findOne({
           model: 'user',
@@ -340,11 +362,13 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         }).catch(() => null) : Promise.resolve(null)
       ]) as [any, any]
 
+      const roleTranslation = role ? await resolveTranslation(ctx.context.adapter, role.id, locale) : null
+
       const { userId, roleId, ...memberWithoutDuplicates } = updated
       return ctx.json({
         ...memberWithoutDuplicates,
         user: user ? { id: user.id, name: user.name, image: user.image } : null,
-        role: role ? { id: role.id, name: role.name, description: role.description } : null,
+        role: role ? { id: role.id, name: roleTranslation?.name ?? role.name, description: roleTranslation?.description ?? role.description } : null,
       })
     }
   ),
@@ -523,6 +547,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       // Batch fetch users and roles in parallel for better performance (avoid N+1 queries)
       const userIds = [...new Set(items.map(m => m.userId))]
       const roleIds = [...new Set(items.map(m => m.roleId).filter(Boolean))] as string[]
+      const locale = getLocaleFromHeaders(ctx.headers, config?.i18n?.defaultLocale)
 
       // Execute user and role queries in parallel
       const [users, roles] = await Promise.all([
@@ -540,6 +565,27 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         ))
       ]) as [any[], any[]]
 
+      // Batch fetch translations (locale + 'en' fallback) for all roles in parallel
+      const needFallback = locale !== 'en'
+      const allTranslations = await Promise.all(
+        roleIds.flatMap(id => [
+          ctx.context.adapter.findMany({
+            model: 'roleTranslation',
+            where: [{ field: 'roleId', value: id }, { field: 'locale', value: locale }],
+          }).catch(() => []),
+          needFallback
+            ? ctx.context.adapter.findMany({
+                model: 'roleTranslation',
+                where: [{ field: 'roleId', value: id }, { field: 'locale', value: 'en' }],
+              }).catch(() => [])
+            : Promise.resolve([]),
+        ])
+      ) as any[][]
+      const translationMap = new Map<string, any>()
+      for (let i = 0; i < roleIds.length; i++) {
+        translationMap.set(roleIds[i], allTranslations[i * 2][0] ?? allTranslations[i * 2 + 1][0] ?? null)
+      }
+
       const userMap = new Map(users.filter(Boolean).map(u => [u.id, u]))
       const roleMap = new Map(roles.filter(Boolean).map(r => [r.id, r]))
 
@@ -547,22 +593,15 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const enrichedItems = items.map((member) => {
         const user = userMap.get(member.userId)
         const role = member.roleId ? roleMap.get(member.roleId) : null
+        const t = member.roleId ? translationMap.get(member.roleId) : null
 
         // Remove duplicate fields (userId, roleId) - keep only enriched objects
         const { userId, roleId, ...memberWithoutDuplicates } = member
 
         return {
           ...memberWithoutDuplicates,
-          user: user ? {
-            id: user.id,
-            name: user.name,
-            image: user.image,
-          } : null,
-          role: role ? {
-            id: role.id,
-            name: role.name,
-            description: role.description,
-          } : null,
+          user: user ? { id: user.id, name: user.name, image: user.image } : null,
+          role: role ? { id: role.id, name: t?.name ?? role.name, description: t?.description ?? role.description } : null,
         }
       })
 
