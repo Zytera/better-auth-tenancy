@@ -38,6 +38,7 @@
 
 import type {BetterAuthClientPlugin} from 'better-auth/client'
 import type {BetterFetchOption} from '@better-fetch/fetch'
+import type { RoleTranslationInput } from '../types/role'
 
 export interface TenancyClientConfig {
     /**
@@ -396,6 +397,16 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
                         fetchOptions?: BetterFetchOption
                     ) => {
                         return await $fetch('/tenancy/role/statement/remove', {
+                            method: 'POST',
+                            body: data,
+                            ...fetchOptions,
+                        })
+                    },
+                    setTranslations: async (
+                        data: { id: string; translations: RoleTranslationInput[] },
+                        fetchOptions?: BetterFetchOption
+                    ) => {
+                        return await $fetch('/tenancy/role/translations/set', {
                             method: 'POST',
                             body: data,
                             ...fetchOptions,
