@@ -1,4 +1,4 @@
-import type { ContextType } from './context'
+import type { ContextType } from './context.js'
 
 /**
  * Invitation status

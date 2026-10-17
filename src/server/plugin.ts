@@ -1,12 +1,12 @@
-import type { TenancyConfig } from '../types'
+import type { TenancyConfig } from '../types/index.js'
 import type { BetterAuthPlugin } from 'better-auth'
-import { organizationEndpoints } from './organizations'
-import { teamEndpoints } from './teams'
-import { statementEndpoints } from './statements'
-import { roleEndpoints } from './roles'
-import { memberEndpoints } from './members'
-import { invitationEndpoints } from './invitations'
-import { permissionEndpoints } from './permissions'
+import { organizationEndpoints } from './organizations.js'
+import { teamEndpoints } from './teams.js'
+import { statementEndpoints } from './statements.js'
+import { roleEndpoints } from './roles.js'
+import { memberEndpoints } from './members.js'
+import { invitationEndpoints } from './invitations.js'
+import { permissionEndpoints } from './permissions.js'
 
 /**
  * Better Auth Tenancy Plugin
@@ -252,4 +252,4 @@ export function isTenancyPlugin(plugin: unknown): plugin is BetterAuthPlugin {
 }
 
 // Re-export types for convenience
-export type { TenancyConfig } from '../types/config'
+export type { TenancyConfig } from '../types/config.js'

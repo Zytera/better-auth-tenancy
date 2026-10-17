@@ -38,14 +38,23 @@
 
 import type {BetterAuthClientPlugin} from 'better-auth/client'
 import type {BetterFetchOption} from '@better-fetch/fetch'
-import type { RoleTranslationInput } from '../types/role'
+import type { RoleTranslationInput } from '../types/role.js'
+
+// Parameter types for `getActions`, derived from the plugin interface itself so
+// they track whichever better-auth version is installed (the client must keep
+// working from better-auth 1.0 up).
+type GetActionsParams = Parameters<NonNullable<BetterAuthClientPlugin['getActions']>>
 
 export interface TenancyClientConfig {
     /**
      * Preferred locale for i18n (e.g., 'en', 'es', 'fr')
-     * This will add the Accept-Language header to all requests
+     *
+     * Sent as the `Accept-Language` header on every `/tenancy/*` request, so the
+     * server picks the matching translations and error messages. Accepts a
+     * static code or a getter evaluated per request, for i18n runtimes where
+     * the active locale changes without a page reload (e.g. paraglide).
      */
-    locale?: string
+    locale?: string | (() => string)
 }
 
 /**
@@ -57,11 +66,12 @@ export interface TenancyClientConfig {
  * @param config - Optional client configuration
  * @returns BetterAuthClientPlugin
  */
-export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlugin {
+export function tenancyClient(config?: TenancyClientConfig) {
+    const locale = config?.locale
     return {
-        id: 'better-auth-tenancy',
+        id: 'better-auth-tenancy' as const,
 
-        getActions: ($fetch) => ({
+        getActions: (...[$fetch]: GetActionsParams) => ({
             tenancy: {
                 organization: {
                     create: async (
@@ -812,14 +822,35 @@ export function tenancyClient(config?: TenancyClientConfig): BetterAuthClientPlu
             }
         }),
 
-        ...(config?.locale && {
-            fetchOptions: {
-                headers: {
-                    'Accept-Language': config.locale,
+        // better-auth's client only consumes `getActions`, `getAtoms`, `pathMethods`,
+        // `atomListeners` and `fetchPlugins` from client plugins: a top-level
+        // `fetchOptions` here is silently ignored (verified against better-auth
+        // 1.7.x, `getClientConfig` in `dist/client/config.mjs`). The header is
+        // therefore applied through a better-fetch plugin, evaluated per request.
+        // Scoped to `/tenancy/*` so the rest of the auth endpoints are untouched.
+        //
+        // NOTE: keep the return type of `tenancyClient` precise (this object
+        // literal, no `BetterAuthClientPlugin` annotation): better-auth infers
+        // the typed `authClient.tenancy.*` actions from this shape, and a plugin
+        // widened to the bare interface breaks the whole client's action
+        // inference in better-auth 1.7.x.
+        ...(locale && {
+            fetchPlugins: [
+                {
+                    id: 'tenancy-accept-language',
+                    name: 'tenancy-accept-language',
+                    hooks: {
+                        onRequest(context) {
+                            const url = typeof context.url === 'string' ? context.url : context.url.href
+                            if (!url.includes('/tenancy/')) return
+                            const value = typeof locale === 'function' ? locale() : locale
+                            if (value) context.headers.set('Accept-Language', value)
+                        },
+                    },
                 },
-            },
+            ],
         }),
-    }
+    } satisfies BetterAuthClientPlugin
 }
 
-export type * from '../types'
+export type * from '../types/index.js'

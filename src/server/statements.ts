@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Statement, StatementTranslation } from '../schema'
-import type { StatementId } from '../types/statement'
-import type { TenancyConfig } from '../types'
-import { validateStatementId } from '../types/statement'
-import { getLocaleFromHeaders } from '../utils/locale-helper'
-import { applyEndpointAuth, requireSession } from './middleware'
-import { getErrorMessage } from '../utils/error-messages'
-import { ok, created, noContent, okList, okBatch, statementSchema, statementWithTranslationSchema } from './openapi'
+import type { Statement, StatementTranslation } from '../schema/index.js'
+import type { StatementId } from '../types/statement.js'
+import type { TenancyConfig } from '../types/index.js'
+import { validateStatementId } from '../types/statement.js'
+import { getLocaleFromHeaders } from '../utils/locale-helper.js'
+import { applyEndpointAuth, requireSession } from './middleware.js'
+import { getErrorMessage } from '../utils/error-messages.js'
+import { ok, created, noContent, okList, okBatch, statementSchema, statementWithTranslationSchema } from './openapi.js'
 
 export interface CreateStatementInput {
   id: StatementId

@@ -20,7 +20,7 @@ export type {
   HierarchyLimits,
   I18nConfig,
   InvitationConfig,
-} from './config'
+} from './config.js'
 
 // Context
 export type {
@@ -34,7 +34,7 @@ export type {
   TypedContext,
   ContextResolution,
   ContextValidation,
-} from './context'
+} from './context.js'
 
 // Events
 export type {
@@ -58,18 +58,18 @@ export type {
   AuditHooks,
   AuditEvent,
   ActionHooks,
-} from './events'
+} from './events.js'
 
 // Hooks
 export type {
   CacheHooks,
   CacheManagerOptions,
-} from './hooks'
+} from './hooks.js'
 
 export {
   CacheKeyPatterns,
   CacheTTL,
-} from './hooks'
+} from './hooks.js'
 
 // Statements
 export type {
@@ -84,7 +84,7 @@ export type {
   CreateStatementInput,
   StatementTranslationInput,
   UpdateStatementInput,
-} from './statement'
+} from './statement.js'
 
 export {
   CommonStatementCategories,
@@ -92,7 +92,7 @@ export {
   buildStatementId,
   parseStatementId,
   validateStatementId,
-} from './statement'
+} from './statement.js'
 
 // Roles
 export type {
@@ -108,7 +108,7 @@ export type {
   RoleConflict,
   RoleQueryOptions,
   RolePermissionsSummary,
-} from './role'
+} from './role.js'
 
 // Invitations
 export type {
@@ -124,4 +124,4 @@ export type {
   InvitationStatistics,
   BulkInvitationInput,
   BulkInvitationResult,
-} from './invitation'
+} from './invitation.js'

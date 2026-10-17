@@ -1,5 +1,5 @@
 import { getSessionFromCtx, APIError } from 'better-auth/api'
-import type { EndpointAuthHook, EndpointAuthContext } from '../types/config'
+import type { EndpointAuthHook, EndpointAuthContext } from '../types/config.js'
 
 /**
  * Get authenticated session from request context.

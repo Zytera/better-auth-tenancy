@@ -1,5 +1,5 @@
-import type { CacheHooks } from './hooks'
-import type { AuditHooks, ActionHooks } from './events'
+import type { CacheHooks } from './hooks.js'
+import type { AuditHooks, ActionHooks } from './events.js'
 import type { z } from 'zod'
 
 /**

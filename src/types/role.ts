@@ -1,5 +1,5 @@
-import type { StatementId } from './statement'
-import type { ContextType } from './context'
+import type { StatementId } from './statement.js'
+import type { ContextType } from './context.js'
 
 export type RoleType = 'organization' | 'team'
 
