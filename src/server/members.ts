@@ -1,15 +1,15 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { Member } from '../schema'
-import type { ContextType } from '../types/context'
-import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
-import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper'
-import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSchema } from './openapi'
+import type { Member } from '../schema/index.js'
+import type { ContextType } from '../types/context.js'
+import type { TenancyConfig, ResourceContext } from '../types/config.js'
+import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
+import { getErrorMessage } from '../utils/error-messages.js'
+import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper.js'
+import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSchema } from './openapi.js'
 
-export type { Member } from '../schema'
+export type { Member } from '../schema/index.js'
 
 
 /**

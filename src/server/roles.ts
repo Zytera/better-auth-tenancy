@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { Role, RoleTranslation } from '../schema'
-import type { TenancyConfig, ResourceContext } from '../types/config'
-import type { StatementId } from '../types'
-import { applyEndpointAuth, requireSession } from './middleware'
-import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders } from '../utils/locale-helper'
-import { ok, created, noContent, okList, roleSchema, roleWithStatementsSchema, roleListItemSchema } from './openapi'
+import type { Role, RoleTranslation } from '../schema/index.js'
+import type { TenancyConfig, ResourceContext } from '../types/config.js'
+import type { StatementId } from '../types/index.js'
+import { applyEndpointAuth, requireSession } from './middleware.js'
+import { getErrorMessage } from '../utils/error-messages.js'
+import { getLocaleFromHeaders } from '../utils/locale-helper.js'
+import { ok, created, noContent, okList, roleSchema, roleWithStatementsSchema, roleListItemSchema } from './openapi.js'
 
 /**
  * Find role and determine its context

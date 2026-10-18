@@ -1,15 +1,15 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { PermissionGrant, PermissionDeny } from '../schema'
-import type { ContextType } from '../types/context'
-import type { StatementId } from '../types/statement'
-import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession } from './middleware'
+import type { PermissionGrant, PermissionDeny } from '../schema/index.js'
+import type { ContextType } from '../types/context.js'
+import type { StatementId } from '../types/statement.js'
+import type { TenancyConfig, ResourceContext } from '../types/config.js'
+import { applyEndpointAuth, requireSession } from './middleware.js'
 import {
   ok, created, noContent, okArray, okBatch,
   permissionGrantSchema, permissionDenySchema, permissionCheckSchema, permissionContextSchema,
-} from './openapi'
+} from './openapi.js'
 
 /**
  * Find permission (grant or deny) and determine its context

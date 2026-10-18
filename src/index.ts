@@ -102,7 +102,7 @@ export {
   invitationContextTypeSchema,
   // All schemas array
   allSchemas,
-} from './schema'
+} from './schema/index.js'
 
 export type {
   // Hierarchical Entities
@@ -122,7 +122,7 @@ export type {
   PermissionDeny,
   // Invitations
   Invitation,
-} from './schema'
+} from './schema/index.js'
 
 // Type exports (prefer types from ./types over schema enums)
 export type {
@@ -204,7 +204,7 @@ export type {
   InvitationStatistics,
   BulkInvitationInput,
   BulkInvitationResult,
-} from './types'
+} from './types/index.js'
 
 export {
   CacheKeyPatterns,
@@ -214,7 +214,7 @@ export {
   buildStatementId,
   parseStatementId,
   validateStatementId,
-} from './types'
+} from './types/index.js'
 
 // Invitation utilities for generating tokens, codes, QR data, etc.
 export {
@@ -226,7 +226,7 @@ export {
   isInvitationExpired,
   canUseInvitation,
   calculateExpirationDate,
-} from './utils/invitation-helper'
+} from './utils/invitation-helper.js'
 
 // Server exports removed - using Better Auth adapter directly
 

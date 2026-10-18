@@ -5,32 +5,32 @@
  */
 
 // Export main plugin and utilities
-export { tenancy, isTenancyPlugin } from './plugin'
+export { tenancy, isTenancyPlugin } from './plugin.js'
 
 // Export configuration types
-export type { TenancyConfig } from './plugin'
+export type { TenancyConfig } from './plugin.js'
 
 // Export endpoint functions
-export { organizationEndpoints } from './organizations'
-export { teamEndpoints, deleteTeamRecursive } from './teams'
-export { statementEndpoints } from './statements'
-export { roleEndpoints } from './roles'
-export { memberEndpoints } from './members'
-export { invitationEndpoints } from './invitations'
-export { permissionEndpoints, resolvePermission, requirePermission } from './permissions'
-export type { ResolvePermissionResult } from './permissions'
+export { organizationEndpoints } from './organizations.js'
+export { teamEndpoints, deleteTeamRecursive } from './teams.js'
+export { statementEndpoints } from './statements.js'
+export { roleEndpoints } from './roles.js'
+export { memberEndpoints } from './members.js'
+export { invitationEndpoints } from './invitations.js'
+export { permissionEndpoints, resolvePermission, requirePermission } from './permissions.js'
+export type { ResolvePermissionResult } from './permissions.js'
 
 // Export middleware utilities
-export { requireSession, applyEndpointAuth } from './middleware'
+export { requireSession, applyEndpointAuth } from './middleware.js'
 
 // Export input types
-export type { CreateOrganizationInput, UpdateOrganizationInput } from './organizations'
-export type { CreateTeamInput, UpdateTeamInput } from './teams'
-export type { CreateStatementInput } from './statements'
-export type { CreateRoleInput, UpdateRoleInput } from './roles'
-export type { AddMemberInput, UpdateMemberRoleInput, Member } from './members'
-export type { CreateInvitationInput } from './invitations'
-export type { GrantPermissionInput, DenyPermissionInput, RevokePermissionInput, CheckPermissionInput } from './permissions'
+export type { CreateOrganizationInput, UpdateOrganizationInput } from './organizations.js'
+export type { CreateTeamInput, UpdateTeamInput } from './teams.js'
+export type { CreateStatementInput } from './statements.js'
+export type { CreateRoleInput, UpdateRoleInput } from './roles.js'
+export type { AddMemberInput, UpdateMemberRoleInput, Member } from './members.js'
+export type { CreateInvitationInput } from './invitations.js'
+export type { GrantPermissionInput, DenyPermissionInput, RevokePermissionInput, CheckPermissionInput } from './permissions.js'
 
 // Export config types
 export type {
@@ -42,10 +42,10 @@ export type {
   I18nConfig,
   InvitationConfig,
   PermissionFilteringHooks,
-} from '../types/config'
+} from '../types/config.js'
 
 // Export hook types
-export type { CacheHooks, AuditHooks } from '../types'
+export type { CacheHooks, AuditHooks } from '../types/index.js'
 
 // Export context types
-export type { ContextType, Context } from '../types'
+export type { ContextType, Context } from '../types/index.js'

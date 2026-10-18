@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Organization } from '../schema'
-import type { TenancyConfig } from '../types'
-import { cleanupContextPermissions } from './permissions'
-import { deleteTeamRecursive } from './teams'
-import { applyEndpointAuth, requireSession } from './middleware'
-import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders } from '../utils/locale-helper'
-import { ok, created, noContent, okList, organizationSchema } from './openapi'
+import type { Organization } from '../schema/index.js'
+import type { TenancyConfig } from '../types/index.js'
+import { cleanupContextPermissions } from './permissions.js'
+import { deleteTeamRecursive } from './teams.js'
+import { applyEndpointAuth, requireSession } from './middleware.js'
+import { getErrorMessage } from '../utils/error-messages.js'
+import { getLocaleFromHeaders } from '../utils/locale-helper.js'
+import { ok, created, noContent, okList, organizationSchema } from './openapi.js'
 
 export interface CreateOrganizationInput {
   name: string

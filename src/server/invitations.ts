@@ -1,20 +1,20 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
 import type { Adapter } from 'better-auth'
-import type { Invitation } from '../schema'
-import type { ContextType } from '../types/context'
-import type { TenancyConfig, ResourceContext } from '../types/config'
-import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware'
+import type { Invitation } from '../schema/index.js'
+import type { ContextType } from '../types/context.js'
+import type { TenancyConfig, ResourceContext } from '../types/config.js'
+import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
 import {
   generateInvitationToken,
   generateInvitationCode,
   isValidInvitationCode,
   canUseInvitation,
   calculateExpirationDate,
-} from '../utils/invitation-helper'
-import { getErrorMessage } from '../utils/error-messages'
-import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper'
-import { ok, created, okList, okArray, invitationEnrichedSchema } from './openapi'
+} from '../utils/invitation-helper.js'
+import { getErrorMessage } from '../utils/error-messages.js'
+import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper.js'
+import { ok, created, okList, okArray, invitationEnrichedSchema } from './openapi.js'
 
 export async function findInvitationContext(
   adapter: Adapter,
