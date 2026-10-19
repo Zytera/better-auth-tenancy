@@ -43,7 +43,17 @@ import type { RoleTranslationInput } from '../types/role.js'
 // Parameter types for `getActions`, derived from the plugin interface itself so
 // they track whichever better-auth version is installed (the client must keep
 // working from better-auth 1.0 up).
-type GetActionsParams = Parameters<NonNullable<BetterAuthClientPlugin['getActions']>>
+//
+// The alias MUST be exported: declaration emit keeps exported aliases lazy, so
+// the emitted d.ts resolves the parameter type against the better-auth version
+// the CONSUMER has installed. A local alias gets inlined into dist frozen at
+// build time (e.g. 1.3.x's nanostores `Store` from `better-auth/client`), which
+// is not assignable to newer cores (1.7.x moved `ClientStore` to
+// `@better-auth/core`) — the plugin then fails `BetterAuthClientPlugin`
+// assignability and better-auth degrades the whole client's action inference.
+export type TenancyGetActionsFetch = Parameters<
+    NonNullable<BetterAuthClientPlugin['getActions']>
+>[0]
 
 export interface TenancyClientConfig {
     /**
@@ -71,7 +81,7 @@ export function tenancyClient(config?: TenancyClientConfig) {
     return {
         id: 'better-auth-tenancy' as const,
 
-        getActions: (...[$fetch]: GetActionsParams) => ({
+        getActions: ($fetch: TenancyGetActionsFetch) => ({
             tenancy: {
                 organization: {
                     create: async (

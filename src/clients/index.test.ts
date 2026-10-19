@@ -62,3 +62,93 @@ test('tenancyClient: URL objects are handled too', () => {
 
   expect(context.headers.get('Accept-Language')).toBe('en')
 })
+
+// ---------------------------------------------------------------------------
+// Regression: the header must reach the wire through better-auth's REAL client
+// machinery, not just through our hook in isolation. 3.1.x shipped exactly the
+// unit-tested intent with the wrong transport: a top-level `fetchOptions` on
+// the plugin, which better-auth's `getClientConfig` silently drops (it only
+// consumes `fetchPlugins` from client plugins). These tests fail if that shape
+// is ever reintroduced: no `fetchOptions`-based header ever arrives here.
+//
+// The `getActions` signature must also keep its parameter types LAZY (see the
+// exported `TenancyGetActionsFetch` alias): tsc inlines local aliases into the
+// emitted d.ts frozen at build time, which breaks `BetterAuthClientPlugin`
+// assignability on consumers running other better-auth versions (1.7.x moved
+// ClientStore to @better-auth/core) and degrades their whole client inference.
+// ---------------------------------------------------------------------------
+
+import { createAuthClient } from 'better-auth/client'
+import type { TenancyClientConfig } from './index'
+
+type RecordedRequest = { path: string; acceptLanguage: string | null }
+
+/** Local origin that records every incoming request and answers empty JSON. */
+function startHeaderRecorder() {
+  const requests: RecordedRequest[] = []
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      const url = new URL(req.url)
+      requests.push({ path: url.pathname, acceptLanguage: req.headers.get('accept-language') })
+      return Response.json({})
+    },
+  })
+  return {
+    requests,
+    baseURL: `http://localhost:${server.port}/api/auth`,
+    stop: () => server.stop(true),
+  }
+}
+
+function clientWithLocale(baseURL: string, config?: TenancyClientConfig) {
+  return createAuthClient({
+    baseURL,
+    plugins: [tenancyClient(config)],
+  })
+}
+
+test('wiring: static locale reaches the wire through a real better-auth client', async () => {
+  const recorder = startHeaderRecorder()
+  try {
+    const client = clientWithLocale(recorder.baseURL, { locale: 'es' })
+
+    await client.tenancy.organization.get({ id: 'org_1' })
+
+    expect(recorder.requests).toHaveLength(1)
+    expect(recorder.requests[0].path).toBe('/api/auth/tenancy/organization/org_1')
+    expect(recorder.requests[0].acceptLanguage).toBe('es')
+  } finally {
+    recorder.stop()
+  }
+})
+
+test('wiring: getter locale is re-evaluated per request through a real client', async () => {
+  const recorder = startHeaderRecorder()
+  try {
+    let active = 'es'
+    const client = clientWithLocale(recorder.baseURL, { locale: () => active })
+
+    await client.tenancy.organization.get({ id: 'org_1' })
+    active = 'en'
+    await client.tenancy.organization.get({ id: 'org_1' })
+
+    expect(recorder.requests.map((r) => r.acceptLanguage)).toEqual(['es', 'en'])
+  } finally {
+    recorder.stop()
+  }
+})
+
+test('wiring: non-tenancy endpoints stay untouched through a real client', async () => {
+  const recorder = startHeaderRecorder()
+  try {
+    const client = clientWithLocale(recorder.baseURL, { locale: 'es' })
+
+    await client.signIn.email({ email: 'user@test.dev', password: 'secret' })
+
+    expect(recorder.requests[0].path).toBe('/api/auth/sign-in/email')
+    expect(recorder.requests[0].acceptLanguage).toBeNull()
+  } finally {
+    recorder.stop()
+  }
+})
