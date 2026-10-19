@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.2.1
+
+### Fixed
+
+- **`dist` types no longer depend on the build-time better-auth version.**
+  The `getActions` parameter type was a local alias, which declaration emit
+  inlines into the emitted d.ts resolved against the better-auth installed at
+  build time — breaking `BetterAuthClientPlugin` assignability (and degrading
+  client action inference) for consumers running other versions. It is now the
+  exported `TenancyGetActionsFetch` alias, which stays lazy in the d.ts and
+  resolves against the consumer's own better-auth install (peer range
+  `>=1.0.0`).
+
+### Internal
+
+- ESLint migrated to flat config and added as a real devDependency (the lint
+  script had been failing silently: no local eslint installed, legacy config
+  unreadable by modern ESLint).
+- Wiring regression tests through a real better-auth client: `Accept-Language`
+  must reach the wire on `/tenancy/*` and never elsewhere.
+
 ## 3.2.0
 
 ### Fixed
