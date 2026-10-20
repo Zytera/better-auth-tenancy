@@ -45,9 +45,14 @@ import { permissionEndpoints } from './permissions.js'
  * })
  * ```
  */
-export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
+export function tenancy(config?: TenancyConfig) {
   validateConfig(config)
 
+  // `satisfies` keeps the return type inference of the literal object
+  // (concrete `endpoints` types) while still validating the plugin shape.
+  // Annotating the return as bare `BetterAuthPlugin` widens the type and
+  // erases the endpoint types from `auth.api` in consumer code — same
+  // widening issue the client plugin guards against below.
   return {
     id: 'better-auth-tenancy',
     endpoints: {
@@ -191,7 +196,7 @@ export function tenancy(config?: TenancyConfig): BetterAuthPlugin {
         },
       },
     } as any,
-  }
+  } satisfies BetterAuthPlugin
 }
 
 /**
