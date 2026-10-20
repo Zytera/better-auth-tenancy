@@ -1,6 +1,6 @@
 {
   "name": "@zytera/better-auth-tenancy",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "Multi-tenant organizations with hierarchical RBAC for Better Auth - complete workspace management with teams, roles, and permissions",
   "type": "module",
   "main": "./dist/index.js",
