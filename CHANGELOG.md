@@ -48,6 +48,32 @@
     they get **403** instead of the full resolution (grants/denies include
     `grantedBy`/`expiresAt`, making them reconnaissance material).
 
+- **The `better-auth` peer dependency floor is now `>=1.4.5` (#33, A03:2025
+  supply chain).** The development lockfile resolved `better-auth@1.3.27`,
+  affected by 21 aggregated advisories — 2 critical (2FA bypass via
+  `session.cookieCache`, GHSA-xg6x-h9c9-2m83; OAuth refresh-token replay,
+  GHSA-pw9m-5jxm-xr6h), 15 high, 2 moderate, 2 low — while the declared peer
+  range allowed any version `>=1.0.0`.
+  - **Breaking:** consumers must run `better-auth >=1.4.5` (the minimum
+    release that carries the security fixes and still exports every API the
+    plugin uses). The development lockfile now pins `better-auth@1.7.22`
+    (latest stable 1.x), which the full suite (199 tests), strict
+    type-check and build pass against.
+  - Plugin code change for the 1.7.x line: the `Adapter` type alias was
+    removed upstream; the plugin now imports `DBAdapter` (the canonical
+    type, exported throughout the supported range 1.4.5 → latest).
+  - CI: the advisory dependency-audit job is now a **gate** (`bun audit
+    --audit-level=high`, fails on high/critical; the only temporarily
+    accepted advisory is the zod < 4.6.6 high owned by #35), and the peer
+    compatibility matrix now tests the new floor (`1.4.5`) and `latest` —
+    the previous `1.2.12` pivot violated the new peer range.
+  - Collateral updates dragged by the better-auth upgrade in the dev
+    lockfile: `defu` 6.1.4 → 6.1.7 and `kysely` 0.28.8 → 0.28.20 (both
+    patched lines, no audit findings), `jose` 6.1.0 → 6.2.17, and a nested
+    `zod@4.6.7` resolution for the `better-auth`/`@better-auth/core` scopes.
+    The root `zod` (dev + peer) range is deliberately untouched — raising it
+    to `>=4.6.6` is #35.
+
 ## 4.0.0
 
 ### Breaking (security)

@@ -431,7 +431,7 @@ yarn add @zytera/better-auth-tenancy better-auth
 ### Prerequisites
 
 - **Bun**: >=1.0.0 (or Node.js >=18.0.0)
-- **Better Auth**: ^1.0.0
+- **Better Auth**: >=1.4.5 (minimum peer, see the changelog for #33; the plugin is tested against the floor and the latest 1.x release)
 - **Database**: Any supported by Better Auth
 - **React Native/Expo**: @better-auth/expo for mobile support
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import type { DBAdapter } from 'better-auth'
 import type { Role, RoleTranslation } from '../schema/index.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
 import type { StatementId } from '../types/index.js'
@@ -14,7 +14,7 @@ import { ok, created, noContent, okList, roleSchema, roleWithStatementsSchema, r
  * Single query to the unified role model
  */
 export async function findRoleContext(
-  adapter: Adapter,
+  adapter: DBAdapter,
   roleId: string
 ): Promise<ResourceContext | null> {
   const role = await adapter.findOne({
