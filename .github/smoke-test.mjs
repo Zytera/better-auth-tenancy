@@ -22,7 +22,7 @@ assert.equal(typeof root.validateStatementId, 'function', 'root: validateStateme
 assert.equal(root.validateStatementId('team:read').isValid, true)
 
 assert.equal(typeof root.generateInvitationCode, 'function', 'root: generateInvitationCode must be exported')
-assert.match(root.generateInvitationCode(), /^[A-Z]{3}[0-9]{3}$/)
+assert.match(root.generateInvitationCode(), /^[A-HJ-NP-Z2-9]{8}$/)
 assert.equal(typeof root.generateInvitationLink, 'function', 'root: generateInvitationLink must be exported')
 assert.equal(
   root.generateInvitationLink('https://app.example.com', 'tok123'),

@@ -116,13 +116,23 @@ const invitation = await authClient.tenancy.invitation.create({
   contextType: 'team',
   contextId: teamId,
   roleId: editorRoleId,
-  expiresInHours: 72
+  expiresInHours: 72,
+  generateCode: true // short code for manual entry
 })
 
 await authClient.tenancy.invitation.accept({
   token: invitation.token
 })
 ```
+
+When `generateCode: true`, the invitation also carries a short code for manual
+entry (e.g. shared over SMS/phone): 8 characters from an unambiguous
+32-character alphabet (A-H J-N P-Z 2-9; `I`/`O`/`0`/`1` are excluded so codes
+can be read aloud and typed without confusion), generated with a CSPRNG —
+32⁸ = 2⁴⁰ ≈ 1.1 × 10¹² combinations. The long link/QR `token` (64 hex chars)
+is generated separately with `crypto.randomBytes`. Codes created by plugin
+versions before 4.1.0 used a 6-character format and are rejected by the
+`by-code` and `accept` endpoints (re-issue those invitations).
 
 ### Internationalization (i18n)
 
@@ -1218,7 +1228,7 @@ function App() {
 5. **Set expiration dates** for temporary permissions
 6. **Use action hooks** for critical business logic (user creation, member addition) with automatic rollback
 7. **Use audit hooks** for logging and monitoring permission changes
-8. **Implement rate limiting** on invitation endpoints
+8. **Implement rate limiting** on invitation endpoints. The plugin does not rate limit; this is the consumer's responsibility at the edge/gateway, same as for the other endpoints. Prioritize `invitation/by-code/:code` and `invitation/accept` (throttle **per code and per IP**): the short code is a credential for manual entry, and without throttling an attacker can brute-force it online. The codes themselves are CSPRNG-generated over 32⁸ ≈ 1.1 × 10¹² combinations (#30), which makes brute force impractical at any realistic throttled rate.
 9. **Use environment variables** for sensitive configuration
 10. **Set `maxNestingDepth`** to prevent excessive hierarchy depth
 
