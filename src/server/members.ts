@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Member } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
-import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
+import { applyEndpointAuth, requireEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
 import { getErrorMessage } from '../utils/error-messages.js'
 import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-helper.js'
 import { ok, created, noContent, okList, okArray, memberSchema, memberEnrichedSchema } from './openapi.js'
@@ -77,7 +77,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const addedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.member?.add, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.member?.add, ctx, session)
 
       const { userId, contextType, contextId, roleId, metadata } = ctx.body
 
@@ -245,7 +245,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.member?.updateRole, {
+      await requireEndpointAuth(config?.endpoints?.member?.updateRole, {
         ...ctx,
         resource,
       }, session)
@@ -328,7 +328,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
       }
 
       // Match updateMemberRole's shape: the hook expects ctx.resource + session
-      await applyEndpointAuth(config?.endpoints?.member?.updateRole, { ...ctx, resource }, session)
+      await requireEndpointAuth(config?.endpoints?.member?.updateRole, { ...ctx, resource }, session)
 
       const updated = await ctx.context.adapter.update({
         model: 'member',
@@ -389,7 +389,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.member?.remove, {
+      await requireEndpointAuth(config?.endpoints?.member?.remove, {
         ...ctx,
         resource,
       }, session)

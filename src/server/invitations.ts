@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Invitation } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
-import { applyEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
+import { applyEndpointAuth, getOptionalSession, requireEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
 import {
   generateInvitationToken,
   generateInvitationCode,
@@ -92,7 +92,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const invitedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.invitation?.create, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.invitation?.create, ctx, session)
 
       const { identifier, contextType, contextId, roleId, expiresInHours, generateCode, metadata } = ctx.body
 
@@ -365,7 +365,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      await applyEndpointAuth(config?.endpoints?.invitation?.accept, ctx)
+      // Token-based flow: the caller may be an unauthenticated invitee, but a
+      // hook is MANDATORY — without one this write endpoint fails closed (403).
+      // The hook receives the session when the caller is authenticated.
+      const session = await getOptionalSession(ctx)
+      await requireEndpointAuth(config?.endpoints?.invitation?.accept, ctx, session)
 
       const { token, invitationCode, metadata } = ctx.body
 
@@ -494,7 +498,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      await applyEndpointAuth(config?.endpoints?.invitation?.decline, ctx)
+      // Token-based flow: the caller may be an unauthenticated invitee, but a
+      // hook is MANDATORY — without one this write endpoint fails closed (403).
+      // The hook receives the session when the caller is authenticated.
+      const session = await getOptionalSession(ctx)
+      await requireEndpointAuth(config?.endpoints?.invitation?.decline, ctx, session)
 
       const { token, invitationCode } = ctx.body
 
@@ -619,7 +627,7 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.invitation?.revoke, {
+      await requireEndpointAuth(config?.endpoints?.invitation?.revoke, {
         ...ctx,
         resource,
       }, session)
@@ -937,7 +945,11 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      await applyEndpointAuth(config?.endpoints?.invitation?.cleanupExpired, ctx)
+      // Cron-style endpoint: typically no user session. A hook is MANDATORY —
+      // without one this write endpoint fails closed (403). The hook receives
+      // the session when the caller is authenticated.
+      const session = await getOptionalSession(ctx)
+      await requireEndpointAuth(config?.endpoints?.invitation?.cleanupExpired, ctx, session)
 
       const allInvitations = await ctx.context.adapter.findMany({
         model: 'invitation',

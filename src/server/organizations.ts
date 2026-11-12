@@ -4,7 +4,7 @@ import type { Organization } from '../schema/index.js'
 import type { TenancyConfig } from '../types/index.js'
 import { cleanupContextPermissions } from './permissions.js'
 import { deleteTeamRecursive } from './teams.js'
-import { applyEndpointAuth, requireSession } from './middleware.js'
+import { applyEndpointAuth, requireEndpointAuth, requireSession } from './middleware.js'
 import { getErrorMessage } from '../utils/error-messages.js'
 import { getLocaleFromHeaders } from '../utils/locale-helper.js'
 import { ok, created, noContent, okList, organizationSchema } from './openapi.js'
@@ -44,7 +44,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.organization?.create, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.organization?.create, ctx, session)
 
       const { name, slug, metadata } = ctx.body
 
@@ -187,7 +187,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.organization?.update, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.organization?.update, ctx, session)
 
       const { id, name, slug, metadata } = ctx.body
 
@@ -259,7 +259,7 @@ export const organizationEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.organization?.delete, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.organization?.delete, ctx, session)
 
       const { id } = ctx.body
 

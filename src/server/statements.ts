@@ -5,7 +5,7 @@ import type { StatementId } from '../types/statement.js'
 import type { TenancyConfig } from '../types/index.js'
 import { validateStatementId } from '../types/statement.js'
 import { getLocaleFromHeaders } from '../utils/locale-helper.js'
-import { applyEndpointAuth, requireSession } from './middleware.js'
+import { applyEndpointAuth, requireEndpointAuth, requireSession } from './middleware.js'
 import { getErrorMessage } from '../utils/error-messages.js'
 import { ok, created, noContent, okList, okBatch, statementSchema, statementWithTranslationSchema } from './openapi.js'
 
@@ -33,7 +33,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.statement?.create, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.statement?.create, ctx, session)
 
       const { id } = ctx.body
 
@@ -162,7 +162,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.statement?.update, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.statement?.update, ctx, session)
 
       const { id, category, operation } = ctx.body
 
@@ -224,7 +224,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.statement?.delete, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.statement?.delete, ctx, session)
 
       const { id } = ctx.body
 
@@ -449,7 +449,7 @@ export const statementEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.statement?.batchCreate, ctx, session)
 
       const { statements } = ctx.body
       const successful: Statement[] = []

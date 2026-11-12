@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased
+
+### Breaking (security)
+
+- **Endpoint authorization is now fail-closed by default (CWE-862).**
+  Previously every endpoint only required a valid session and all
+  authorization was delegated to OPTIONAL hooks: with no `endpoints` config —
+  the documented quickstart setup — any authenticated user could delete any
+  organization, add itself as a member or grant itself permissions, bypassing
+  the RBAC model entirely.
+  - **Write endpoints** (create/update/delete of organizations, teams,
+    members, roles, statements, invitations and all permission grant/deny/
+    revoke/batch endpoints, plus invitation accept/reject/cleanup) now
+    return **403** for every request — authenticated or not — until the
+    consumer configures the corresponding hook in `config.endpoints`.
+  - **Read endpoints** now require an authenticated session when no hook is
+    configured (anonymous callers get **401** instead of the full response).
+    A configured hook fully replaces this default; token-based flows such as
+    invitation accept/reject/by-token keep working by configuring a no-op
+    hook (the token is the credential), which was already the pattern used by
+    the `auth` service.
+  - `GET /tenancy/permission/check` now resolves the (optional) session and
+    passes it to the `permission.check` hook instead of always passing
+    `session: null`; anonymous calls without a hook get 401.
+  - **`POST /tenancy/permission/revoke` now passes the session to its hook**
+    (it was always `null` — hook implementations reading `session` silently
+    misbehaved).
+  - Invitation accept/reject/cleanup endpoints now resolve the optional
+    session and pass it to their hooks.
+  - The plugin logs a **console warning at startup** when no endpoint hooks
+    are configured at all.
+
+  Consumers must review their `tenancy({ endpoints: ... })` configuration:
+  any operation that used to pass because no hook was configured will now
+  fail with 403 (writes) or 401 (anonymous reads).
+
+### Added
+
+- `requireEndpointAuth` and `getOptionalSession` exported from
+  `@zytera/better-auth-tenancy/server` alongside the existing
+  `requireSession` / `applyEndpointAuth` middleware helpers.
+
 ## 3.2.1
 
 ### Fixed

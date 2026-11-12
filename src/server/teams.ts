@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Team } from '../schema/index.js'
 import type { TenancyConfig } from '../types/index.js'
 import { cleanupContextPermissions } from './permissions.js'
-import { applyEndpointAuth, requireSession } from './middleware.js'
+import { applyEndpointAuth, requireEndpointAuth, requireSession } from './middleware.js'
 import { getErrorMessage } from '../utils/error-messages.js'
 import { getLocaleFromHeaders } from '../utils/locale-helper.js'
 import { ok, created, noContent, okList, teamSchema } from './openapi.js'
@@ -154,7 +154,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.team?.create, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.team?.create, ctx, session)
 
       const { parentType, parentId, name, slug, metadata } = ctx.body
 
@@ -338,7 +338,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const updatedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.team?.update, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.team?.update, ctx, session)
 
       const { id, name, slug, metadata } = ctx.body
 
@@ -411,7 +411,7 @@ export const teamEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deletedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.team?.delete, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.team?.delete, ctx, session)
 
       const { id } = ctx.body
 

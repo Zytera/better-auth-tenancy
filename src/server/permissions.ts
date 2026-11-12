@@ -5,7 +5,7 @@ import type { PermissionGrant, PermissionDeny } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { StatementId } from '../types/statement.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
-import { applyEndpointAuth, requireSession } from './middleware.js'
+import { applyEndpointAuth, getOptionalSession, requireEndpointAuth, requireSession } from './middleware.js'
 import {
   ok, created, noContent, okArray, okBatch,
   permissionGrantSchema, permissionDenySchema, permissionCheckSchema, permissionContextSchema,
@@ -102,7 +102,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const grantedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.permission?.grant, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.permission?.grant, ctx, session)
 
       const { userId, statementId, contextType, contextId, expiresAt } = ctx.body
 
@@ -188,7 +188,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deniedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.permission?.deny, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.permission?.deny, ctx, session)
 
       const { userId, statementId, contextType, contextId } = ctx.body
 
@@ -261,10 +261,10 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
         throw new APIError('NOT_FOUND', { message: `${type === 'grant' ? 'Grant' : 'Deny'} with id "${permissionId}" not found` })
       }
 
-      await applyEndpointAuth(config?.endpoints?.permission?.revoke, {
+      await requireEndpointAuth(config?.endpoints?.permission?.revoke, {
         ...ctx,
         resource,
-      })
+      }, session)
 
       const permission = resource.data as PermissionGrant | PermissionDeny
       const modelName = type === 'grant' ? 'permissionGrant' : 'permissionDeny'
@@ -310,7 +310,8 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       },
     },
     async (ctx) => {
-      await applyEndpointAuth(config?.endpoints?.permission?.check, ctx)
+      const session = await getOptionalSession(ctx)
+      await applyEndpointAuth(config?.endpoints?.permission?.check, ctx, session)
 
       const { userId, statementId, contextType, contextId } = ctx.body
 
@@ -625,7 +626,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const grantedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.permission?.grantBatch, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.permission?.grantBatch, ctx, session)
 
       const { grants } = ctx.body
       const successful: PermissionGrant[] = []
@@ -730,7 +731,7 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const deniedBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.permission?.denyBatch, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.permission?.denyBatch, ctx, session)
 
       const { denies } = ctx.body
       const successful: PermissionDeny[] = []

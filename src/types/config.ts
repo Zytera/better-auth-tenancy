@@ -9,7 +9,16 @@ import type { z } from 'zod'
 export interface TenancyConfig {
   /**
    * Endpoint protection configuration
-   * Customize authorization logic for each endpoint action
+   * Customize authorization logic for each endpoint action.
+   *
+   * Authorization is FAIL-CLOSED by default:
+   * - Write endpoints (create/update/delete/grant/...) reject every request
+   *   with 403 when their hook is not configured.
+   * - Read endpoints require an authenticated session when their hook is not
+   *   configured (anonymous callers get 401).
+   *
+   * Configure a hook for every operation you intend to expose. A configured
+   * hook fully replaces the default and must throw to deny.
    *
    * @example
    * ```typescript
