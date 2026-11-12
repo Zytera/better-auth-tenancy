@@ -1,0 +1,286 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Cancel superseded runs on the same branch/PR to free runners early.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static quality gates
+  # ---------------------------------------------------------------------------
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+  type-check:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type check (strict)
+        run: bun run type-check
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Verify dist contents
+        run: |
+          for entry in \
+            dist/index.js \
+            dist/index.d.ts \
+            dist/server/index.js \
+            dist/server/index.d.ts \
+            dist/clients/index.js \
+            dist/clients/index.d.ts; do
+            test -f "$entry" || { echo "::error::Missing build artifact: $entry"; exit 1; }
+          done
+          # Test files must never leak into the published package
+          # (tsconfig excludes **/*.test.ts from emit; guard against regression).
+          if find dist -name '*.test.*' | grep -q .; then
+            echo "::error::Test files were emitted into dist/:"
+            find dist -name '*.test.*'
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Test suite across runtimes
+  # ---------------------------------------------------------------------------
+
+  test:
+    name: Test (Bun ${{ matrix.bun-version }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, bun-version: latest }
+          - { os: macos-latest, bun-version: latest }
+          - { os: windows-latest, bun-version: latest }
+          # Oldest Bun that supports the text bun.lock format.
+          - { os: ubuntu-latest, bun-version: '1.2.23' }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun-version }}
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+  coverage:
+    name: Test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: |
+          set -eo pipefail
+          bun test --coverage --coverage-reporter=text --coverage-reporter=lcov --coverage-dir=coverage 2>&1 | tee coverage-run.log
+
+      - name: Append coverage summary to the job summary
+        if: always()
+        run: |
+          {
+            echo '## Coverage (bun test)'
+            echo '```'
+            tail -n 25 coverage-run.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/lcov.info
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Peer dependency compatibility (better-auth >= 1.0.0 is declared)
+  # ---------------------------------------------------------------------------
+
+  peer-compat:
+    name: Test with better-auth ${{ matrix.better-auth }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor of the declared peer range and the current release line.
+        better-auth: ['1.2.12', 'latest']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Pin better-auth to ${{ matrix.better-auth }}
+        env:
+          BETTER_AUTH_SPEC: ${{ matrix.better-auth }}
+        run: |
+          VERSION="$BETTER_AUTH_SPEC"
+          if [ "$VERSION" = "latest" ]; then
+            VERSION="$(npm view better-auth version)"
+          fi
+          echo "Pinning better-auth@$VERSION"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.devDependencies['better-auth'] = process.argv[1];
+            pkg.peerDependencies['better-auth'] = process.argv[1];
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          " "$VERSION"
+
+      - name: Install dependencies
+        run: bun install --no-frozen-lockfile
+
+      - name: Verify installed better-auth version
+        run: node -p "require('better-auth/package.json').version"
+
+      - name: Run tests
+        run: bun test
+
+  # ---------------------------------------------------------------------------
+  # Packed-package smoke test: the tarball must load from Node ESM with the
+  # public entrypoints intact (regression guard for dist/exports breakage).
+  # ---------------------------------------------------------------------------
+
+  package-smoke:
+    name: Package smoke test (Node ESM)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build package
+        run: bun run build
+
+      - name: Pack the package
+        run: |
+          mkdir -p /tmp/pkg
+          npm pack --pack-destination /tmp/pkg
+          echo "TARBALL=$(ls /tmp/pkg/*.tgz)" >> "$GITHUB_ENV"
+
+      - name: Install the tarball in a clean consumer project
+        run: |
+          mkdir -p /tmp/consumer
+          cd /tmp/consumer
+          echo '{"name":"tenancy-smoke-consumer","private":true}' > package.json
+          npm install --no-audit --no-fund "$TARBALL" better-auth@latest
+
+      - name: Import from Node ESM and exercise the public API
+        run: |
+          cp .github/smoke-test.mjs /tmp/consumer/smoke.mjs
+          cd /tmp/consumer
+          node smoke.mjs
+
+      - name: Verify type declarations ship for every entrypoint
+        run: |
+          cd /tmp/consumer
+          for entry in \
+            node_modules/@zytera/better-auth-tenancy/dist/index.d.ts \
+            node_modules/@zytera/better-auth-tenancy/dist/server/index.d.ts \
+            node_modules/@zytera/better-auth-tenancy/dist/clients/index.d.ts; do
+            test -f "$entry" || { echo "::error::Missing .d.ts in tarball: $entry"; exit 1; }
+          done
+
+  # ---------------------------------------------------------------------------
+  # Dependency audit (advisory: reports findings without failing the PR)
+  # ---------------------------------------------------------------------------
+
+  audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve a package lockfile for npm audit
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
