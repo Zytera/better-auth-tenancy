@@ -23,7 +23,7 @@ import type { TenancyConfig } from '../types'
  *   the dedicated hook (permission.check / listGrants / listDenies).
  * - Token-based invitation writes (accept/reject/cleanup): no hook -> 403;
  *   a configured hook keeps the token flow working and receives the session.
- * - revokePermission passes the session to its hook (M8).
+ * - revokePermission passes the session to its hook (M8, #36).
  */
 
 // ---------------------------------------------------------------------------
@@ -414,7 +414,15 @@ test('organization/list anonymous callers get 401 even with permissionFiltering 
 })
 
 // ---------------------------------------------------------------------------
-// M8: revokePermission passes the session to its hook
+// M8 (#36): revokePermission passes the session to its hook.
+//
+// The issue's two impact modes, covered end-to-end:
+// - an identity-authorizing hook must see the caller identity and allow the
+//   revoke (with the bug it received null -> TypeError -> 500, accidentally
+//   DoSing the whole revocation feature);
+// - the same hook must deny a mismatched caller (a hook that treats null as
+//   "no identity required" would silently authorize revoking anyone's
+//   permissions — CWE-863).
 // ---------------------------------------------------------------------------
 
 test('revokePermission passes session and resource to the hook (M8)', async () => {
@@ -434,6 +442,42 @@ test('revokePermission passes session and resource to the hook (M8)', async () =
   await response
   expect(seen.session?.user?.id).toBe('user1')
   expect(seen.ctx.resource?.contextType).toBe('organization')
+})
+
+test('revokePermission: identity-authorizing hook sees the caller and allows the revoke (#36)', async () => {
+  const identityHook = async ({ session }) => {
+    if (session?.user?.id !== 'user1') {
+      throw new APIError('FORBIDDEN', { message: 'revocation restricted to user1' })
+    }
+  }
+  const adapter = fakeAdapter()
+  const response = await permissionEndpoints({
+    endpoints: { permission: { revoke: identityHook } },
+  }).revokePermission({
+    headers: new Headers(),
+    context: { adapter, session: authedSession() },
+    body: { permissionId: 'row1', type: 'grant' },
+  })
+  await response
+  expect(adapter.ops).toContain('delete')
+})
+
+test('revokePermission: identity-authorizing hook denies a mismatched caller (#36)', async () => {
+  const identityHook = async ({ session }) => {
+    if (session?.user?.id !== 'admin9') {
+      throw new APIError('FORBIDDEN', { message: 'revocation restricted to admin9' })
+    }
+  }
+  await expectStatus(
+    permissionEndpoints({
+      endpoints: { permission: { revoke: identityHook } },
+    }).revokePermission({
+      headers: new Headers(),
+      context: { adapter: fakeAdapter(), session: authedSession() },
+      body: { permissionId: 'row1', type: 'grant' },
+    }),
+    'FORBIDDEN',
+  )
 })
 
 // ---------------------------------------------------------------------------
