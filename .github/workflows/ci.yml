@@ -200,7 +200,7 @@ jobs:
         run: bun install --no-frozen-lockfile
 
       - name: Verify installed better-auth version
-        run: node -p "require('better-auth/package.json').version"
+        run: node -p "JSON.parse(require('fs').readFileSync('node_modules/better-auth/package.json', 'utf8')).version"
 
       - name: Run tests
         run: bun test
