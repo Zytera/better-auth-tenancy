@@ -8,7 +8,11 @@
  * - defu   >= 6.1.5   (#37, GHSA-737v-mqg7-c878: prototype pollution via
  *   `__proto__` in defu <= 6.1.4; transitively owned by better-auth, which
  *   resolved outside the vulnerable range from 1.7.22 on, see #33)
- * - kysely >= 0.28.17 (#38, transitive via better-auth adapters)
+ * - kysely >= 0.28.17 (#38, GHSA-pv5w-4p9q-p3v2 (JSON path traversal),
+ *   GHSA-wmrf-hv6w-mr66 (SQLi via JSON path keys) and GHSA-8cpq-38p9-67gx
+ *   (MySQL SQLi via `sql.lit`) in kysely >= 0.26.0 < 0.28.17; transitively
+ *   owned by better-auth, which resolved outside the vulnerable range from
+ *   1.7.22 on, see #33)
  * - zod    >= 4.6.6   (#35, GHSA-mrhx-c7xc-m3w5: memory exhaustion
  *   validating oversized constrained collections)
  *
@@ -47,7 +51,8 @@ const SECURITY_FLOORS: SecurityFloor[] = [
     package: 'kysely',
     floor: '0.28.17',
     issue: 38,
-    why: 'Security floor of the kysely finding (epic #40)',
+    advisory: 'GHSA-pv5w-4p9q-p3v2/GHSA-wmrf-hv6w-mr66/GHSA-8cpq-38p9-67gx',
+    why: 'SQL injection via JSON path keys and MySQL sql.lit (kysely >= 0.26.0 < 0.28.17)',
   },
   {
     package: 'zod',
