@@ -24,6 +24,23 @@
     GHSA-737v-mqg7-c878, CWE-1395/CWE-1321 prototype pollution via
     `__proto__`, high severity).
 
+- **`kysely` is resolved outside the vulnerable range of its three SQL
+  injection advisories (#38, CWE-1395/CWE-89, A03:2025).**
+  `kysely >= 0.26.0 < 0.28.17` is affected by GHSA-pv5w-4p9q-p3v2 (JSON
+  path traversal), GHSA-wmrf-hv6w-mr66 (SQL injection via JSON path keys)
+  and GHSA-8cpq-38p9-67gx (MySQL SQL injection via `sql.lit`). The plugin
+  builds no SQL of its own — every query goes through better-auth's
+  adapter — so the vector lives in the host consumer stack, and it is
+  closed there: the better-auth 1.7.22 lockfile upgrade of #33 (which
+  depends on `kysely ^0.28.17 || ^0.29.0`) dragged `kysely` 0.28.8 →
+  0.28.20, past every patched version, without a lockfile change in this
+  release.
+  - Verified at closure: the lockfile holds a single `kysely@0.28.20`
+    resolution (no nested duplicates under other packages), `bun audit
+    --audit-level=high` reports no findings, and the `check:security-deps`
+    guard of #37 (above) pins the `>= 0.28.17` floor across every lockfile
+    resolution in CI.
+
 - **Regression coverage for the `permission.revoke` hook session forwarding
   (#36, CWE-863/CWE-755).** The session has been passed to the hook since
   4.0.0 (via `requireEndpointAuth`); new tests pin the contract end-to-end:
