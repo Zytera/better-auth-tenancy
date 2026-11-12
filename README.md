@@ -1211,7 +1211,7 @@ function App() {
 
 ## Security Best Practices
 
-1. **Configure endpoint authorization hooks (`endpoints`)**. The plugin fails closed by default: write endpoints return `403` for every request and read endpoints require an authenticated session (`401`) until a hook is configured for them. A missing hook is a configuration error, never an implicit "any authenticated user can do this". Audit your `endpoints` config at startup — the plugin logs a warning when no hooks are configured at all.
+1. **Configure endpoint authorization hooks (`endpoints`)**. The plugin fails closed by default: write endpoints return `403` for every request and read endpoints require an authenticated session (`401`) until a hook is configured for them. A missing hook is a configuration error, never an implicit "any authenticated user can do this". Audit your `endpoints` config at startup — the plugin logs a warning when no hooks are configured at all. The permission oracle (`permission/check`, `permission/grants`, `permission/denies`) additionally only lets authenticated callers query **themselves**: queries about another user need the `permission.check` / `permission.listGrants` / `permission.listDenies` hook (`403` otherwise).
 2. **Always use HTTPS in production**
 3. **Validate user input** on the server side
 4. **Use deny rules** for sensitive permissions

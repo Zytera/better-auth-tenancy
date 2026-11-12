@@ -207,8 +207,23 @@ export interface EndpointConfig {
     grant?: EndpointAuthHook
     deny?: EndpointAuthHook
     revoke?: EndpointAuthHook
+    /**
+     * Override for checking another user's permissions (permission/check).
+     * Self-checks are always allowed. Undefined = self-only (fail-closed).
+     * Must throw to deny.
+     */
     check?: EndpointAuthHook
+    /**
+     * Override for listing another user's grants (permission/grants).
+     * Self-lookups are always allowed. Undefined = self-only (fail-closed).
+     * Must throw to deny.
+     */
     listGrants?: EndpointAuthHook
+    /**
+     * Override for listing another user's denies (permission/denies).
+     * Self-lookups are always allowed. Undefined = self-only (fail-closed).
+     * Must throw to deny.
+     */
     listDenies?: EndpointAuthHook
     /**
      * Override for listing another user's permission contexts

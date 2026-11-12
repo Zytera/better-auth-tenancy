@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test'
+import { APIError } from 'better-auth/api'
 import { tenancy } from './plugin'
 import { organizationEndpoints } from './organizations'
 import { teamEndpoints } from './teams'
@@ -17,6 +18,9 @@ import type { TenancyConfig } from '../types'
  *   403 FORBIDDEN, even for authenticated callers.
  * - READ endpoints: no hook configured -> anonymous callers get 401;
  *   authenticated callers proceed (documented default floor).
+ * - Permission oracle (check/grants/denies, #34): session required, and an
+ *   authenticated caller may only query itself — third-party queries need
+ *   the dedicated hook (permission.check / listGrants / listDenies).
  * - Token-based invitation writes (accept/reject/cleanup): no hook -> 403;
  *   a configured hook keeps the token flow working and receives the session.
  * - revokePermission passes the session to its hook (M8).
@@ -225,9 +229,6 @@ const readCases: Array<[string, (anonymous: boolean) => Promise<any>]> = [
   ['role/list', (anon) => call(noHooks.role.listRoles, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['member/:id', (anon) => call(noHooks.member.getMember, { anonymous: anon, params: { id: 'row1' } })],
   ['member/list', (anon) => call(noHooks.member.listMembers, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
-  ['permission/grants', (anon) => call(noHooks.permission.listGrants, { anonymous: anon, query: { userId: 'user2' } })],
-  ['permission/denies', (anon) => call(noHooks.permission.listDenies, { anonymous: anon, query: { userId: 'user2' } })],
-  ['permission/check', (anon) => call(noHooks.permission.checkPermission, { anonymous: anon, body: { userId: 'user2', statementId: 'team:read', contextType: 'organization', contextId: 'org1' } })],
   ['invitation/list', (anon) => call(noHooks.invitation.listInvitations, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['invitation/by-token/:token', (anon) => call(noHooks.invitation.getInvitationByToken, { anonymous: anon, params: { token: 'tok' } })],
   ['invitation/by-code/:code', (anon) => call(noHooks.invitation.getInvitationByCode, { anonymous: anon, params: { code: 'CODE01' } })],
@@ -244,6 +245,67 @@ for (const [name, run] of readCases) {
     await expectAuthPassed(run(false))
   })
 }
+
+// ---------------------------------------------------------------------------
+// #34: permission oracle (check/grants/denies) — session + self-or-hook
+//
+// Unlike generic read endpoints, these expose per-user authorization state
+// (allowed, reason, details.source, grantedBy, expiresAt), so an
+// authenticated caller may only query itself. Third-party queries fail
+// closed (403) unless the consumer configures the dedicated hook.
+// ---------------------------------------------------------------------------
+
+const oracleBody = { userId: 'user1', statementId: 'team:read', contextType: 'organization', contextId: 'org1' }
+
+test('permission oracle: anonymous callers get 401 (check/grants/denies)', async () => {
+  await expectStatus(call(noHooks.permission.checkPermission, { anonymous: true, body: oracleBody }), 'UNAUTHORIZED')
+  await expectStatus(call(noHooks.permission.listGrants, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+  await expectStatus(call(noHooks.permission.listDenies, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+})
+
+test('permission oracle: authenticated callers may query themselves without a hook', async () => {
+  const check = await call(noHooks.permission.checkPermission, { body: oracleBody })
+  // Empty adapter: authorization passed and the resolver ran to "no permission"
+  expect(check.allowed).toBe(false)
+  expect(check.reason).toBe('No permission found')
+  expect(await call(noHooks.permission.listGrants, { query: { userId: 'user1' } })).toEqual([])
+  expect(await call(noHooks.permission.listDenies, { query: { userId: 'user1' } })).toEqual([])
+})
+
+test('permission oracle: third-party queries fail closed without a hook (403)', async () => {
+  await expectStatus(call(noHooks.permission.checkPermission, { body: { ...oracleBody, userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(noHooks.permission.listGrants, { query: { userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(noHooks.permission.listDenies, { query: { userId: 'user2' } }), 'FORBIDDEN')
+})
+
+test('permission oracle: third-party queries with an allowing hook proceed, hook receives the caller session', async () => {
+  let seenSessionUserId: string | undefined = 'never-called'
+  const config: TenancyConfig = {
+    endpoints: {
+      permission: {
+        check: async ({ session }) => { seenSessionUserId = session?.user?.id },
+        listGrants: allow,
+        listDenies: allow,
+      },
+    },
+  }
+  const endpoints = permissionEndpoints(config)
+  const check = await call(endpoints.checkPermission, { body: { ...oracleBody, userId: 'user2' } })
+  expect(check.allowed).toBe(false)
+  expect(seenSessionUserId).toBe('user1')
+  expect(await call(endpoints.listGrants, { query: { userId: 'user2' } })).toEqual([])
+  expect(await call(endpoints.listDenies, { query: { userId: 'user2' } })).toEqual([])
+})
+
+test('permission oracle: third-party queries with a denying hook get the hook decision (403)', async () => {
+  const deny = async () => { throw new APIError('FORBIDDEN', { message: 'denied' }) }
+  const endpoints = permissionEndpoints({
+    endpoints: { permission: { check: deny, listGrants: deny, listDenies: deny } },
+  })
+  await expectStatus(call(endpoints.checkPermission, { body: { ...oracleBody, userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(endpoints.listGrants, { query: { userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(endpoints.listDenies, { query: { userId: 'user2' } }), 'FORBIDDEN')
+})
 
 // y-tu-que-compras scenario: organization/list has no hook but consumers
 // filter via permissionFiltering; a valid session must still be enough.
