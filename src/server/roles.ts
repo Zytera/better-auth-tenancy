@@ -4,7 +4,7 @@ import type { Adapter } from 'better-auth'
 import type { Role, RoleTranslation } from '../schema/index.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
 import type { StatementId } from '../types/index.js'
-import { applyEndpointAuth, requireSession } from './middleware.js'
+import { applyEndpointAuth, requireEndpointAuth, requireSession } from './middleware.js'
 import { getErrorMessage } from '../utils/error-messages.js'
 import { getLocaleFromHeaders } from '../utils/locale-helper.js'
 import { ok, created, noContent, okList, roleSchema, roleWithStatementsSchema, roleListItemSchema } from './openapi.js'
@@ -75,7 +75,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
       const session = await requireSession(ctx)
       const createdBy = session.user.id
 
-      await applyEndpointAuth(config?.endpoints?.role?.create, ctx, session)
+      await requireEndpointAuth(config?.endpoints?.role?.create, ctx, session)
 
       const { contextType, contextId, name, description, statements, translations } = ctx.body
 
@@ -302,7 +302,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.role?.update, {
+      await requireEndpointAuth(config?.endpoints?.role?.update, {
         ...ctx,
         resource,
       }, session)
@@ -367,7 +367,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.role?.delete, {
+      await requireEndpointAuth(config?.endpoints?.role?.delete, {
         ...ctx,
         resource,
       }, session)
@@ -609,7 +609,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.role?.addStatement, {
+      await requireEndpointAuth(config?.endpoints?.role?.addStatement, {
         ...ctx,
         resource,
       }, session)
@@ -672,7 +672,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.role?.update, { ...ctx, resource }, session)
+      await requireEndpointAuth(config?.endpoints?.role?.update, { ...ctx, resource }, session)
 
       // Replace all translations for this role
       await ctx.context.adapter.delete({
@@ -720,7 +720,7 @@ export const roleEndpoints = (config?: TenancyConfig) => ({
         })
       }
 
-      await applyEndpointAuth(config?.endpoints?.role?.removeStatement, {
+      await requireEndpointAuth(config?.endpoints?.role?.removeStatement, {
         ...ctx,
         resource,
       }, session)

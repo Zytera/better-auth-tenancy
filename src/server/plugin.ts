@@ -23,6 +23,18 @@ import { permissionEndpoints } from './permissions.js'
  * export const auth = betterAuth({
  *   plugins: [
  *     tenancy({
+ *       // REQUIRED for authorization: the plugin fails closed by default.
+ *       // Write endpoints return 403 and reads require a session until a
+ *       // hook is configured for them.
+ *       endpoints: {
+ *         organization: {
+ *           create: async ({ session }) => yourAuthorizationLogic(session),
+ *           delete: async ({ session, ctx }) => checkOwnership(ctx),
+ *         },
+ *         member: {
+ *           add: async ({ session, ctx }) => checkAdminMembership(ctx),
+ *         },
+ *       },
  *       limits: {
  *         maxTeamsPerOrganization: 100,
  *         maxMembersPerOrganization: 10000,
@@ -47,6 +59,7 @@ import { permissionEndpoints } from './permissions.js'
  */
 export function tenancy(config?: TenancyConfig) {
   validateConfig(config)
+  warnIfNoEndpointHooks(config)
 
   // `satisfies` keeps the return type inference of the literal object
   // (concrete `endpoints` types) while still validating the plugin shape.
@@ -197,6 +210,41 @@ export function tenancy(config?: TenancyConfig) {
       },
     } as any,
   } satisfies BetterAuthPlugin
+}
+
+/**
+ * Count the endpoint authorization hooks configured in `config.endpoints`.
+ */
+function countEndpointHooks(endpoints: TenancyConfig['endpoints']): number {
+  if (!endpoints) return 0
+  let count = 0
+  for (const group of Object.values(endpoints)) {
+    if (!group) continue
+    for (const hook of Object.values(group)) {
+      if (typeof hook === 'function') count++
+    }
+  }
+  return count
+}
+
+/**
+ * Warn at startup when no endpoint authorization hooks are configured.
+ *
+ * The plugin fails closed: without hooks, every write endpoint rejects all
+ * requests (403) and read endpoints require an authenticated session. A
+ * missing configuration is almost always a mistake, so surface it loudly
+ * instead of letting integrators discover it through 403s in production.
+ */
+function warnIfNoEndpointHooks(config?: TenancyConfig): void {
+  if (countEndpointHooks(config?.endpoints) === 0) {
+    console.warn(
+      '[BetterAuthTenancy] No endpoint authorization hooks are configured (config.endpoints). ' +
+        'The plugin fails closed by default: write endpoints reject every request with 403 and ' +
+        'read endpoints require an authenticated session. Configure config.endpoints hooks to ' +
+        'control who can perform each operation, or allow-list specific actions explicitly. ' +
+        'See the "Security Best Practices" section of the README.'
+    )
+  }
 }
 
 /**

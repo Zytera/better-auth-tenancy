@@ -21,7 +21,7 @@ export { permissionEndpoints, resolvePermission, requirePermission } from './per
 export type { ResolvePermissionResult } from './permissions.js'
 
 // Export middleware utilities
-export { requireSession, applyEndpointAuth } from './middleware.js'
+export { requireSession, getOptionalSession, applyEndpointAuth, requireEndpointAuth, requireSelfOr } from './middleware.js'
 
 // Export input types
 export type { CreateOrganizationInput, UpdateOrganizationInput } from './organizations.js'

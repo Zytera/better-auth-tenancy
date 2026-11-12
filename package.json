@@ -40,6 +40,7 @@
   "scripts": {
     "build": "tsc",
     "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
     "prepublishOnly": "bun run build"

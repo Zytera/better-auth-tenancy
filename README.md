@@ -466,6 +466,48 @@ export const auth = betterAuth({
   },
   plugins: [
     tenancy({
+      // REQUIRED: endpoint authorization hooks.
+      //
+      // The plugin is FAIL-CLOSED by default:
+      //   - Write endpoints (create/update/delete/grant/...) reject every
+      //     request with 403 until you configure a hook for them.
+      //   - Read endpoints require an authenticated session (401 for
+      //     anonymous callers) until you configure a hook for them.
+      //
+      // A configured hook fully replaces the default and must throw to deny.
+      endpoints: {
+        organization: {
+          create: async ({ session }) => {
+            // e.g. require a global admin role or a plan check
+            if (!session?.user) throw new Error('Forbidden')
+          },
+          delete: async ({ session, ctx }) => {
+            // e.g. only the owner may delete, checking ctx.body.id
+          },
+          read: async ({ session }) => {
+            // omit or narrow: by default reads require a session only
+          },
+        },
+        member: {
+          add: async ({ session, ctx }) => {
+            // e.g. check an admin membership of ctx.body.contextId
+          },
+        },
+        invitation: {
+          // Token-based flows (accept/reject/getByToken) may be no-ops when
+          // the token itself is the credential — but the hook is still
+          // required, otherwise the endpoint fails closed with 403.
+          accept: async () => {},
+          decline: async () => {},
+        },
+        permission: {
+          grant: async ({ session, ctx }) => {
+            // CRITICAL: without a hook this endpoint fails closed; with a
+            // permissive one, validate who may grant permissions!
+          },
+        },
+      },
+
       // Optional: Cache hooks for Redis
       cache: {
         async get(key: string) {
@@ -1169,15 +1211,16 @@ function App() {
 
 ## Security Best Practices
 
-1. **Always use HTTPS in production**
-2. **Validate user input** on the server side
-3. **Use deny rules** for sensitive permissions
-4. **Set expiration dates** for temporary permissions
-5. **Use action hooks** for critical business logic (user creation, member addition) with automatic rollback
-6. **Use audit hooks** for logging and monitoring permission changes
-7. **Implement rate limiting** on invitation endpoints
-8. **Use environment variables** for sensitive configuration
-9. **Set `maxNestingDepth`** to prevent excessive hierarchy depth
+1. **Configure endpoint authorization hooks (`endpoints`)**. The plugin fails closed by default: write endpoints return `403` for every request and read endpoints require an authenticated session (`401`) until a hook is configured for them. A missing hook is a configuration error, never an implicit "any authenticated user can do this". Audit your `endpoints` config at startup — the plugin logs a warning when no hooks are configured at all.
+2. **Always use HTTPS in production**
+3. **Validate user input** on the server side
+4. **Use deny rules** for sensitive permissions
+5. **Set expiration dates** for temporary permissions
+6. **Use action hooks** for critical business logic (user creation, member addition) with automatic rollback
+7. **Use audit hooks** for logging and monitoring permission changes
+8. **Implement rate limiting** on invitation endpoints
+9. **Use environment variables** for sensitive configuration
+10. **Set `maxNestingDepth`** to prevent excessive hierarchy depth
 
 ## Development
 
