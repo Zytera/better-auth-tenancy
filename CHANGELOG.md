@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Breaking (security)
+
+- **The permission oracle no longer leaks other users' authorization state
+  (#34, CWE-862/CWE-200).** `POST /tenancy/permission/check`,
+  `GET /tenancy/permission/grants` and `GET /tenancy/permission/denies` now
+  follow the same self-or-hook pattern as `member.getMemberships`:
+  - A valid session is always required: anonymous callers get **401**, even
+    when a hook is configured (previously a hook could allow anonymous
+    probing).
+  - Authenticated callers may query **their own** permissions without any
+    hook.
+  - Queries about **another user** require the `permission.check`,
+    `permission.listGrants` or `permission.listDenies` hook; without one
+    they get **403** instead of the full resolution (grants/denies include
+    `grantedBy`/`expiresAt`, making them reconnaissance material).
+
 ## 4.0.0
 
 ### Breaking (security)
