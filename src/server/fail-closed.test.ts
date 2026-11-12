@@ -48,7 +48,7 @@ function richRow() {
     userId: 'user2',
     roleId: 'role1',
     token: 'tok',
-    invitationCode: 'CODE01',
+    invitationCode: 'ABCD2345',
     identifier: 'invitee@example.com',
     invitedBy: 'user2',
     invitedByUser: null,
@@ -231,7 +231,7 @@ const readCases: Array<[string, (anonymous: boolean) => Promise<any>]> = [
   ['member/list', (anon) => call(noHooks.member.listMembers, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['invitation/list', (anon) => call(noHooks.invitation.listInvitations, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['invitation/by-token/:token', (anon) => call(noHooks.invitation.getInvitationByToken, { anonymous: anon, params: { token: 'tok' } })],
-  ['invitation/by-code/:code', (anon) => call(noHooks.invitation.getInvitationByCode, { anonymous: anon, params: { code: 'CODE01' } })],
+  ['invitation/by-code/:code', (anon) => call(noHooks.invitation.getInvitationByCode, { anonymous: anon, params: { code: 'ABCD2345' } })],
 ]
 
 for (const [name, run] of readCases) {
@@ -245,6 +245,32 @@ for (const [name, run] of readCases) {
     await expectAuthPassed(run(false))
   })
 }
+
+// ---------------------------------------------------------------------------
+// #30: invitation codes are CSPRNG-generated over a 40-bit keyspace
+// (8 chars from A-H J-N P-Z 2-9). The validator enforces the new format at
+// every code-entry point, so legacy 6-character codes fail fast with
+// BAD_REQUEST instead of reaching an adapter lookup.
+// ---------------------------------------------------------------------------
+
+test('invitation/by-code rejects legacy 6-character codes with BAD_REQUEST (#30)', async () => {
+  await expectStatus(
+    call(allAllowed.invitation.getInvitationByCode, { params: { code: 'ABC123' } }),
+    'BAD_REQUEST',
+  )
+})
+
+test('invitation/accept by new-format code with configured no-op hook: proceeds', async () => {
+  const adapter = { ...fakeAdapter() }
+  const response = await allAllowed.invitation.acceptInvitation({
+    headers: new Headers(),
+    context: { adapter },
+    body: { invitationCode: 'ABCD2345' },
+  })
+  const data = await response
+  expect(data.invitation.status).toBe('accepted')
+  expect(adapter.ops).toContain('update')
+})
 
 // ---------------------------------------------------------------------------
 // #34: permission oracle (check/grants/denies) — session + self-or-hook
@@ -394,7 +420,7 @@ test('invitation/by-token with configured no-op hook: anonymous lookup proceeds'
   })
   const data = await response
   expect(data.status).toBe('pending')
-  expect(data.invitationCode).toBe('CODE01')
+  expect(data.invitationCode).toBe('ABCD2345')
 })
 
 test('organization/list anonymous callers get 401 even with permissionFiltering configured', async () => {

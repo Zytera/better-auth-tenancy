@@ -14,6 +14,26 @@
 
 ### Breaking (security)
 
+- **Invitation short codes are now generated with a CSPRNG over a 40-bit
+  keyspace (#30, CWE-338/CWE-330).** `generateInvitationCode` previously used
+  `Math.random()` over a 6-character `XXXYYY` format: 26³ × 10³ =
+  17,576,000 combinations (~17.6 million — not the "~2.2 billion" the code
+  comment claimed), trivially brute-forceable online, with a
+  non-cryptographic PRNG whose state is recoverable from observed outputs.
+  Codes are now 8 characters drawn with `crypto.randomInt` from an
+  unambiguous 32-character alphabet (A-H J-N P-Z 2-9; `I`/`O`/`0`/`1`
+  excluded for manual entry): 32⁸ = 2⁴⁰ ≈ 1.1 × 10¹² combinations, same
+  CSPRNG as the link/QR token.
+  - **Breaking:** `isValidInvitationCode` (and therefore
+    `GET /tenancy/invitation/by-code/:code` and the `invitationCode` path of
+    `POST /tenancy/invitation/accept`) rejects the legacy 6-character format
+    with `400 Bad Request`: pending invitations created by earlier versions
+    must be re-issued. Token-based (link/QR) invitations are unaffected —
+    the long token already used a CSPRNG.
+  - Rate limiting per code and per IP for `by-code`/`accept` remains the
+    consumer's responsibility, as for the other invitation endpoints (see
+    Security Best Practices in the README).
+
 - **The permission oracle no longer leaks other users' authorization state
   (#34, CWE-862/CWE-200).** `POST /tenancy/permission/check`,
   `GET /tenancy/permission/grants` and `GET /tenancy/permission/denies` now

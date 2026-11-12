@@ -1,4 +1,13 @@
-import { randomBytes } from 'crypto'
+import { randomBytes, randomInt } from 'crypto'
+
+/**
+ * Alphabet for short invitation codes: 32 unambiguous characters.
+ * `I`/`O` and `0`/`1` are excluded so codes can be read out loud and typed
+ * by hand without confusion. 8 characters drawn from this alphabet give
+ * 32^8 = 2^40 ≈ 1.1 × 10^12 combinations (~40 bits of entropy).
+ */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const CODE_LENGTH = 8
 
 /**
  * Generate a secure random token for invitations
@@ -11,41 +20,35 @@ export function generateInvitationToken(length = 32): string {
 
 /**
  * Generate a short, human-friendly invitation code
- * Format: XXXYYY where X = uppercase letter, Y = digit
- * Example: "ABC123", "XYZ789"
+ * Format: 8 characters from an unambiguous 32-character alphabet
+ * (A-H J-N P-Z 2-9; I/O/0/1 excluded for manual entry)
+ * Example: "ABCD2345", "HJKMNPQR"
  *
- * This provides ~2.2 billion combinations (26^3 * 10^3)
- * which is sufficient for most use cases
+ * Drawn with crypto.randomInt (CSPRNG): uniform sampling with no modulo
+ * bias, giving 32^8 = 2^40 ≈ 1.1 × 10^12 combinations — ~62,000x the
+ * previous 6-character space (26^3 × 10^3 = 17,576,000), which was also
+ * generated with the non-cryptographic Math.random(). Online brute force
+ * is impractical at realistic rates, but rate limiting on the by-code /
+ * accept endpoints remains the consumer's responsibility (see README,
+ * Security Best Practices).
  *
- * @returns 6-character code (3 letters + 3 digits)
+ * @returns 8-character uppercase code
  */
 export function generateInvitationCode(): string {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-  const digits = '0123456789'
-
-  // Generate 3 random letters
   let code = ''
-  for (let i = 0; i < 3; i++) {
-    const randomIndex = Math.floor(Math.random() * letters.length)
-    code += letters[randomIndex]
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]
   }
-
-  // Generate 3 random digits
-  for (let i = 0; i < 3; i++) {
-    const randomIndex = Math.floor(Math.random() * digits.length)
-    code += digits[randomIndex]
-  }
-
   return code
 }
 
 /**
  * Validate invitation code format
  * @param code - Code to validate
- * @returns true if valid format (3 uppercase letters + 3 digits)
+ * @returns true if valid format (8 chars from A-H J-N P-Z 2-9)
  */
 export function isValidInvitationCode(code: string): boolean {
-  return /^[A-Z]{3}[0-9]{3}$/.test(code)
+  return /^[A-HJ-NP-Z2-9]{8}$/.test(code)
 }
 
 /**
