@@ -287,9 +287,5 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Temporarily accepted advisories are listed here, each with the issue
-      # that owns the fix. Remove the entry once the fix lands.
-      # - GHSA-mrhx-c7xc-m3w5 (zod < 4.6.6, high): fixed by raising the zod
-      #   floor to >= 4.6.6 — owned by #35, do not bump zod here.
       - name: "Audit dependencies (threshold: high)"
-        run: bun audit --audit-level=high --ignore GHSA-mrhx-c7xc-m3w5
+        run: bun audit --audit-level=high

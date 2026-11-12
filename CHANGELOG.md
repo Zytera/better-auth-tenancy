@@ -14,6 +14,23 @@
 
 ### Breaking (security)
 
+- **The `zod` peer dependency floor is now `^4.6.6` (#35, GHSA-mrhx-c7xc-m3w5,
+  CWE-1395/CWE-400, A03:2025).** Zod versions below 4.6.6 can exhaust memory
+  while validating oversized constrained collections (e.g. `z.array().max()`
+  in consumer-configured metadata schemas), and the development lockfile
+  resolved the root `zod` to 4.1.12. All request validation across the
+  ~40 `/tenancy/*` endpoints (body/params/query) goes through zod schemas,
+  so the advisory applied to the plugin's whole request surface.
+  - **Breaking:** consumers must run `zod >=4.6.6` (declared range `^4.6.6`;
+    the floor is not lowered below the patched 4.6.6). The lockfile now
+    resolves a single root `zod@4.6.7` (latest stable 4.x), deduplicating
+    the previously nested `better-auth`/`@better-auth/core` scopes; the same
+    4.6.7 satisfies better-auth 1.4.5's `zod ^4.1.12` dependency and 1.7.x's
+    `zod ^4.5.4`, so the peer-compat matrix stays intact.
+  - CI: the `--ignore GHSA-mrhx-c7xc-m3w5` exception is removed from the
+    dependency-audit gate, which now runs exception-free
+    (`bun audit --audit-level=high`).
+
 - **Invitation short codes are now generated with a CSPRNG over a 40-bit
   keyspace (#30, CWE-338/CWE-330).** `generateInvitationCode` previously used
   `Math.random()` over a 6-character `XXXYYY` format: 26³ × 10³ =
@@ -63,16 +80,16 @@
     removed upstream; the plugin now imports `DBAdapter` (the canonical
     type, exported throughout the supported range 1.4.5 → latest).
   - CI: the advisory dependency-audit job is now a **gate** (`bun audit
-    --audit-level=high`, fails on high/critical; the only temporarily
-    accepted advisory is the zod < 4.6.6 high owned by #35), and the peer
+    --audit-level=high`, fails on high/critical; at the time it temporarily
+    accepted the zod < 4.6.6 high owned by #35, whose landing removes the
+    exception), and the peer
     compatibility matrix now tests the new floor (`1.4.5`) and `latest` —
     the previous `1.2.12` pivot violated the new peer range.
   - Collateral updates dragged by the better-auth upgrade in the dev
     lockfile: `defu` 6.1.4 → 6.1.7 and `kysely` 0.28.8 → 0.28.20 (both
-    patched lines, no audit findings), `jose` 6.1.0 → 6.2.17, and a nested
-    `zod@4.6.7` resolution for the `better-auth`/`@better-auth/core` scopes.
-    The root `zod` (dev + peer) range is deliberately untouched — raising it
-    to `>=4.6.6` is #35.
+    patched lines, no audit findings) and `jose` 6.1.0 → 6.2.17. The root
+    `zod` (dev + peer) floor is raised to `>=4.6.6` by #35 in this same
+    release.
 
 ## 4.0.0
 
