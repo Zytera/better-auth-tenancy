@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import type { DBAdapter } from 'better-auth'
 import type { Team } from '../schema/index.js'
 import type { TenancyConfig } from '../types/index.js'
 import { cleanupContextPermissions } from './permissions.js'
@@ -29,7 +29,7 @@ export interface UpdateTeamInput {
  * Safety: max 100 iterations to avoid infinite loops from circular references.
  */
 async function computeNestingDepth(
-  adapter: Adapter,
+  adapter: DBAdapter,
   parentType: string,
   parentId: string
 ): Promise<number> {
@@ -61,7 +61,7 @@ async function computeNestingDepth(
  * Depth-first: deletes child teams first, then the team itself.
  */
 export async function deleteTeamRecursive(
-  adapter: Adapter,
+  adapter: DBAdapter,
   teamId: string,
   config?: TenancyConfig
 ): Promise<{ teamsDeleted: number; grantsDeleted: number; deniesDeleted: number }> {

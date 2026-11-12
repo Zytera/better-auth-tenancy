@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import type { DBAdapter } from 'better-auth'
 import type { PermissionGrant, PermissionDeny } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { StatementId } from '../types/statement.js'
@@ -16,7 +16,7 @@ import {
  * This helper is used to enrich endpoint hooks with resource context
  */
 export async function findPermissionContext(
-  adapter: Adapter,
+  adapter: DBAdapter,
   permissionId: string,
   type: 'grant' | 'deny'
 ): Promise<ResourceContext | null> {
@@ -811,7 +811,7 @@ export interface ResolvePermissionResult {
  * resolution by hand — hand copies drift and only resolve grants.
  */
 export async function resolvePermission(
-  adapter: Adapter,
+  adapter: DBAdapter,
   input: CheckPermissionInput,
   config?: TenancyConfig,
   // ponytail: visited set guards cyclic/self-referential parentId chains
@@ -959,7 +959,7 @@ export function requirePermission(statementId: StatementId) {
 
 // Helper function for cleaning up permissions (used by other modules)
 export async function cleanupContextPermissions(
-  adapter: Adapter,
+  adapter: DBAdapter,
   contextType: ContextType,
   contextId: string
 ): Promise<{ grantsDeleted: number; deniesDeleted: number }> {
