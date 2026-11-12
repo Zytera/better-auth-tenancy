@@ -4,6 +4,26 @@
 
 ### Internal
 
+- **Regression guard for the security dependency floors:
+  `bun run check:security-deps` (#37).** The resolved tree is already
+  outside every vulnerable range fixed by this epic — `defu@6.1.7`
+  (`>= 6.1.5`: dragged out of the vulnerable `<= 6.1.4` range by the
+  better-auth 1.7.22 lockfile upgrade of #33; the only route to defu is
+  better-auth's own dependency, with a single lockfile resolution and no
+  nested duplicates), `kysely@0.28.20` (`>= 0.28.17`, floor of #38) and
+  `zod@4.6.7` (`>= 4.6.6`, floor of #35) — and this guard keeps it that
+  way. `scripts/check-security-deps.ts` parses `bun.lock`, checks **every**
+  resolution (root and nested) of the three dependency findings of epic #40
+  against its pinned floor, and fails the build naming the offending
+  version and the originating issue if any of them regresses (it also fails
+  closed when a watched package has no resolution at all, so a lockfile
+  format change cannot silently neuter it).
+  - Wired into CI: it runs in the `audit` job right after
+    `bun audit --audit-level=high`, so the vulnerable ranges cannot return
+    even if advisory data is unavailable to the audit gate (defu < 6.1.5 is
+    GHSA-737v-mqg7-c878, CWE-1395/CWE-1321 prototype pollution via
+    `__proto__`, high severity).
+
 - **Regression coverage for the `permission.revoke` hook session forwarding
   (#36, CWE-863/CWE-755).** The session has been passed to the hook since
   4.0.0 (via `requireEndpointAuth`); new tests pin the contract end-to-end:
