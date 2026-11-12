@@ -43,6 +43,7 @@
     "test:coverage": "bun test --coverage",
     "lint": "eslint src/",
     "type-check": "tsc --noEmit",
+    "check:security-deps": "bun scripts/check-security-deps.ts",
     "prepublishOnly": "bun run build"
   },
   "keywords": [
