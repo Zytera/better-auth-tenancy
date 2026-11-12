@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Internal
+
+- **Regression coverage for the `permission.revoke` hook session forwarding
+  (#36, CWE-863/CWE-755).** The session has been passed to the hook since
+  4.0.0 (via `requireEndpointAuth`); new tests pin the contract end-to-end:
+  an identity-authorizing hook sees the caller's identity and the revoke
+  completes (previously the hook received `session: null`, which crashed
+  identity-based hooks with a `TypeError` -> 500 and let null-blind hooks
+  silently authorize revoking anyone's permissions).
+
 ### Breaking (security)
 
 - **The permission oracle no longer leaks other users' authorization state
