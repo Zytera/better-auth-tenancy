@@ -260,6 +260,13 @@ test('invitation/by-code rejects legacy 6-character codes with BAD_REQUEST (#30)
   )
 })
 
+test('invitation/reject by code validates the format too: legacy 6-char code -> BAD_REQUEST (4.1.0 review)', async () => {
+  await expectStatus(
+    call(allAllowed.invitation.rejectInvitation, { anonymous: true, body: { invitationCode: 'ABC123' } }),
+    'BAD_REQUEST',
+  )
+})
+
 test('invitation/accept by new-format code with configured no-op hook: proceeds', async () => {
   const adapter = { ...fakeAdapter() }
   const response = await allAllowed.invitation.acceptInvitation({
@@ -287,6 +294,15 @@ test('permission oracle: anonymous callers get 401 (check/grants/denies)', async
   await expectStatus(call(noHooks.permission.checkPermission, { anonymous: true, body: oracleBody }), 'UNAUTHORIZED')
   await expectStatus(call(noHooks.permission.listGrants, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
   await expectStatus(call(noHooks.permission.listDenies, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+})
+
+test('permission oracle: anonymous callers get 401 even with hooks configured (4.1.0 review)', async () => {
+  const endpoints = permissionEndpoints({
+    endpoints: { permission: { check: allow, listGrants: allow, listDenies: allow } },
+  })
+  await expectStatus(call(endpoints.checkPermission, { anonymous: true, body: oracleBody }), 'UNAUTHORIZED')
+  await expectStatus(call(endpoints.listGrants, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+  await expectStatus(call(endpoints.listDenies, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
 })
 
 test('permission oracle: authenticated callers may query themselves without a hook', async () => {

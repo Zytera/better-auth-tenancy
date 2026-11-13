@@ -204,6 +204,9 @@ jobs:
       - name: Verify installed better-auth version
         run: node -p "JSON.parse(require('fs').readFileSync('node_modules/better-auth/package.json', 'utf8')).version"
 
+      - name: Type-check against the pinned better-auth
+        run: bun run type-check
+
       - name: Run tests
         run: bun test
 

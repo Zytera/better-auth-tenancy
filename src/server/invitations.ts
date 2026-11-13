@@ -517,9 +517,13 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'token', value: token }],
         }) as Invitation | null
       } else if (invitationCode) {
+        const code = invitationCode.toUpperCase()
+        if (!isValidInvitationCode(code)) {
+          throw new APIError('BAD_REQUEST', { message: 'Invalid invitation code format' })
+        }
         invitation = await ctx.context.adapter.findOne({
           model: 'invitation',
-          where: [{ field: 'invitationCode', value: invitationCode.toUpperCase() }],
+          where: [{ field: 'invitationCode', value: code }],
         }) as Invitation | null
       }
 
