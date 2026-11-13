@@ -29,30 +29,59 @@ test('generateInvitationToken: generates unique tokens', () => {
 
 // --- generateInvitationCode / isValidInvitationCode ---
 
-test('generateInvitationCode: matches the XXXYYY format (3 letters + 3 digits)', () => {
-  for (let i = 0; i < 50; i++) {
-    expect(generateInvitationCode()).toMatch(/^[A-Z]{3}[0-9]{3}$/)
+test('generateInvitationCode: matches the documented 8-character format', () => {
+  for (let i = 0; i < 200; i++) {
+    expect(generateInvitationCode()).toMatch(/^[A-HJ-NP-Z2-9]{8}$/)
+  }
+})
+
+test('generateInvitationCode: never contains ambiguous characters (I, O, 0, 1)', () => {
+  for (let i = 0; i < 2000; i++) {
+    expect(generateInvitationCode()).not.toMatch(/[IO01]/)
   }
 })
 
 test('isValidInvitationCode: accepts the documented format', () => {
-  expect(isValidInvitationCode('ABC123')).toBe(true)
-  expect(isValidInvitationCode('XYZ789')).toBe(true)
+  expect(isValidInvitationCode('ABCDEFGH')).toBe(true)
+  expect(isValidInvitationCode('JKLMNPQR')).toBe(true)
+  expect(isValidInvitationCode('A2B3C4D5')).toBe(true) // letters and digits mixed
+})
+
+test('isValidInvitationCode: rejects legacy 6-character codes', () => {
+  expect(isValidInvitationCode('ABC123')).toBe(false) // old XXXYYY format
+  expect(isValidInvitationCode('XYZ789')).toBe(false)
 })
 
 test('isValidInvitationCode: rejects wrong formats', () => {
-  expect(isValidInvitationCode('abc123')).toBe(false) // lowercase letters
-  expect(isValidInvitationCode('ABCD23')).toBe(false) // 4 letters
-  expect(isValidInvitationCode('AB1234')).toBe(false) // 2 letters, 4 digits
-  expect(isValidInvitationCode('AB3D12')).toBe(false) // digit in the letter group
+  expect(isValidInvitationCode('ABCDEFG')).toBe(false) // too short (7 chars)
+  expect(isValidInvitationCode('ABCDEFGHJ')).toBe(false) // too long (9 chars)
+  expect(isValidInvitationCode('abcdefgh')).toBe(false) // lowercase letters
+  expect(isValidInvitationCode('IBCDEFGH')).toBe(false) // ambiguous I
+  expect(isValidInvitationCode('OBCDEFGH')).toBe(false) // ambiguous O
+  expect(isValidInvitationCode('1BCDEFGH')).toBe(false) // ambiguous 1
   expect(isValidInvitationCode('')).toBe(false)
-  expect(isValidInvitationCode('ABC123 ')).toBe(false) // trailing space
+  expect(isValidInvitationCode('ABCDEFG ')).toBe(false) // trailing space
 })
 
 test('generateInvitationCode: codes pass its own validator', () => {
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 100; i++) {
     expect(isValidInvitationCode(generateInvitationCode())).toBe(true)
   }
+})
+
+test('generateInvitationCode: generates unique codes', () => {
+  const codes = new Set(Array.from({ length: 1000 }, () => generateInvitationCode()))
+  expect(codes.size).toBe(1000)
+})
+
+test('generateInvitationCode: covers the whole alphabet (no hotspots)', () => {
+  const observed = new Set<string>()
+  for (let i = 0; i < 2000; i++) {
+    for (const char of generateInvitationCode()) observed.add(char)
+  }
+  // 16,000 draws over a 32-char alphabet: expected ~500 occurrences per
+  // character, so observing all 32 is the overwhelmingly likely outcome.
+  expect(observed.size).toBe(32)
 })
 
 // --- generateInvitationLink / generateQRCodeData ---

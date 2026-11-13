@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import type { DBAdapter } from 'better-auth'
 import type { Invitation } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
@@ -17,7 +17,7 @@ import { getLocaleFromHeaders, resolveRoleTranslation } from '../utils/locale-he
 import { ok, created, okList, okArray, invitationEnrichedSchema } from './openapi.js'
 
 export async function findInvitationContext(
-  adapter: Adapter,
+  adapter: DBAdapter,
   token: string
 ): Promise<ResourceContext | null> {
   const invitation = await adapter.findOne({
@@ -37,7 +37,7 @@ export async function findInvitationContext(
 }
 
 export async function findInvitationContextById(
-  adapter: Adapter,
+  adapter: DBAdapter,
   id: string
 ): Promise<ResourceContext | null> {
   const invitation = await adapter.findOne({
@@ -517,9 +517,13 @@ export const invitationEndpoints = (config?: TenancyConfig) => ({
           where: [{ field: 'token', value: token }],
         }) as Invitation | null
       } else if (invitationCode) {
+        const code = invitationCode.toUpperCase()
+        if (!isValidInvitationCode(code)) {
+          throw new APIError('BAD_REQUEST', { message: 'Invalid invitation code format' })
+        }
         invitation = await ctx.context.adapter.findOne({
           model: 'invitation',
-          where: [{ field: 'invitationCode', value: invitationCode.toUpperCase() }],
+          where: [{ field: 'invitationCode', value: code }],
         }) as Invitation | null
       }
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import type { DBAdapter } from 'better-auth'
 import type { Member } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
@@ -17,7 +17,7 @@ export type { Member } from '../schema/index.js'
  * Single query to the unified member model
  */
 export async function findMemberContext(
-  adapter: Adapter,
+  adapter: DBAdapter,
   memberId: string
 ): Promise<ResourceContext | null> {
   const member = await adapter.findOne({
@@ -688,7 +688,7 @@ export const memberEndpoints = (config?: TenancyConfig) => ({
 
 // Helper function for other modules
 export async function _addMember(
-  adapter: Adapter,
+  adapter: DBAdapter,
   input: AddMemberInput,
   config?: TenancyConfig,
   ctx?: any

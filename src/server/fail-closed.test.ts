@@ -1,4 +1,5 @@
 import { test, expect } from 'bun:test'
+import { APIError } from 'better-auth/api'
 import { tenancy } from './plugin'
 import { organizationEndpoints } from './organizations'
 import { teamEndpoints } from './teams'
@@ -17,9 +18,12 @@ import type { TenancyConfig } from '../types'
  *   403 FORBIDDEN, even for authenticated callers.
  * - READ endpoints: no hook configured -> anonymous callers get 401;
  *   authenticated callers proceed (documented default floor).
+ * - Permission oracle (check/grants/denies, #34): session required, and an
+ *   authenticated caller may only query itself — third-party queries need
+ *   the dedicated hook (permission.check / listGrants / listDenies).
  * - Token-based invitation writes (accept/reject/cleanup): no hook -> 403;
  *   a configured hook keeps the token flow working and receives the session.
- * - revokePermission passes the session to its hook (M8).
+ * - revokePermission passes the session to its hook (M8, #36).
  */
 
 // ---------------------------------------------------------------------------
@@ -44,7 +48,7 @@ function richRow() {
     userId: 'user2',
     roleId: 'role1',
     token: 'tok',
-    invitationCode: 'CODE01',
+    invitationCode: 'ABCD2345',
     identifier: 'invitee@example.com',
     invitedBy: 'user2',
     invitedByUser: null,
@@ -225,12 +229,9 @@ const readCases: Array<[string, (anonymous: boolean) => Promise<any>]> = [
   ['role/list', (anon) => call(noHooks.role.listRoles, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['member/:id', (anon) => call(noHooks.member.getMember, { anonymous: anon, params: { id: 'row1' } })],
   ['member/list', (anon) => call(noHooks.member.listMembers, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
-  ['permission/grants', (anon) => call(noHooks.permission.listGrants, { anonymous: anon, query: { userId: 'user2' } })],
-  ['permission/denies', (anon) => call(noHooks.permission.listDenies, { anonymous: anon, query: { userId: 'user2' } })],
-  ['permission/check', (anon) => call(noHooks.permission.checkPermission, { anonymous: anon, body: { userId: 'user2', statementId: 'team:read', contextType: 'organization', contextId: 'org1' } })],
   ['invitation/list', (anon) => call(noHooks.invitation.listInvitations, { anonymous: anon, query: { contextType: 'organization', contextId: 'org1' } })],
   ['invitation/by-token/:token', (anon) => call(noHooks.invitation.getInvitationByToken, { anonymous: anon, params: { token: 'tok' } })],
-  ['invitation/by-code/:code', (anon) => call(noHooks.invitation.getInvitationByCode, { anonymous: anon, params: { code: 'CODE01' } })],
+  ['invitation/by-code/:code', (anon) => call(noHooks.invitation.getInvitationByCode, { anonymous: anon, params: { code: 'ABCD2345' } })],
 ]
 
 for (const [name, run] of readCases) {
@@ -244,6 +245,109 @@ for (const [name, run] of readCases) {
     await expectAuthPassed(run(false))
   })
 }
+
+// ---------------------------------------------------------------------------
+// #30: invitation codes are CSPRNG-generated over a 40-bit keyspace
+// (8 chars from A-H J-N P-Z 2-9). The validator enforces the new format at
+// every code-entry point, so legacy 6-character codes fail fast with
+// BAD_REQUEST instead of reaching an adapter lookup.
+// ---------------------------------------------------------------------------
+
+test('invitation/by-code rejects legacy 6-character codes with BAD_REQUEST (#30)', async () => {
+  await expectStatus(
+    call(allAllowed.invitation.getInvitationByCode, { params: { code: 'ABC123' } }),
+    'BAD_REQUEST',
+  )
+})
+
+test('invitation/reject by code validates the format too: legacy 6-char code -> BAD_REQUEST (4.1.0 review)', async () => {
+  await expectStatus(
+    call(allAllowed.invitation.rejectInvitation, { anonymous: true, body: { invitationCode: 'ABC123' } }),
+    'BAD_REQUEST',
+  )
+})
+
+test('invitation/accept by new-format code with configured no-op hook: proceeds', async () => {
+  const adapter = { ...fakeAdapter() }
+  const response = await allAllowed.invitation.acceptInvitation({
+    headers: new Headers(),
+    context: { adapter },
+    body: { invitationCode: 'ABCD2345' },
+  })
+  const data = await response
+  expect(data.invitation.status).toBe('accepted')
+  expect(adapter.ops).toContain('update')
+})
+
+// ---------------------------------------------------------------------------
+// #34: permission oracle (check/grants/denies) — session + self-or-hook
+//
+// Unlike generic read endpoints, these expose per-user authorization state
+// (allowed, reason, details.source, grantedBy, expiresAt), so an
+// authenticated caller may only query itself. Third-party queries fail
+// closed (403) unless the consumer configures the dedicated hook.
+// ---------------------------------------------------------------------------
+
+const oracleBody = { userId: 'user1', statementId: 'team:read', contextType: 'organization', contextId: 'org1' }
+
+test('permission oracle: anonymous callers get 401 (check/grants/denies)', async () => {
+  await expectStatus(call(noHooks.permission.checkPermission, { anonymous: true, body: oracleBody }), 'UNAUTHORIZED')
+  await expectStatus(call(noHooks.permission.listGrants, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+  await expectStatus(call(noHooks.permission.listDenies, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+})
+
+test('permission oracle: anonymous callers get 401 even with hooks configured (4.1.0 review)', async () => {
+  const endpoints = permissionEndpoints({
+    endpoints: { permission: { check: allow, listGrants: allow, listDenies: allow } },
+  })
+  await expectStatus(call(endpoints.checkPermission, { anonymous: true, body: oracleBody }), 'UNAUTHORIZED')
+  await expectStatus(call(endpoints.listGrants, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+  await expectStatus(call(endpoints.listDenies, { anonymous: true, query: { userId: 'user1' } }), 'UNAUTHORIZED')
+})
+
+test('permission oracle: authenticated callers may query themselves without a hook', async () => {
+  const check = await call(noHooks.permission.checkPermission, { body: oracleBody })
+  // Empty adapter: authorization passed and the resolver ran to "no permission"
+  expect(check.allowed).toBe(false)
+  expect(check.reason).toBe('No permission found')
+  expect(await call(noHooks.permission.listGrants, { query: { userId: 'user1' } })).toEqual([])
+  expect(await call(noHooks.permission.listDenies, { query: { userId: 'user1' } })).toEqual([])
+})
+
+test('permission oracle: third-party queries fail closed without a hook (403)', async () => {
+  await expectStatus(call(noHooks.permission.checkPermission, { body: { ...oracleBody, userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(noHooks.permission.listGrants, { query: { userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(noHooks.permission.listDenies, { query: { userId: 'user2' } }), 'FORBIDDEN')
+})
+
+test('permission oracle: third-party queries with an allowing hook proceed, hook receives the caller session', async () => {
+  let seenSessionUserId: string | undefined = 'never-called'
+  const config: TenancyConfig = {
+    endpoints: {
+      permission: {
+        check: async ({ session }) => { seenSessionUserId = session?.user?.id },
+        listGrants: allow,
+        listDenies: allow,
+      },
+    },
+  }
+  const endpoints = permissionEndpoints(config)
+  const check = await call(endpoints.checkPermission, { body: { ...oracleBody, userId: 'user2' } })
+  expect(check.allowed).toBe(false)
+  expect(seenSessionUserId).toBe('user1')
+  expect(await call(endpoints.listGrants, { query: { userId: 'user2' } })).toEqual([])
+  expect(await call(endpoints.listDenies, { query: { userId: 'user2' } })).toEqual([])
+})
+
+test('permission oracle: third-party queries with a denying hook get the hook decision (403)', async () => {
+  const deny = async () => { throw new APIError('FORBIDDEN', { message: 'denied' }) }
+  const endpoints = permissionEndpoints({
+    endpoints: { permission: { check: deny, listGrants: deny, listDenies: deny } },
+  })
+  await expectStatus(call(endpoints.checkPermission, { body: { ...oracleBody, userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(endpoints.listGrants, { query: { userId: 'user2' } }), 'FORBIDDEN')
+  await expectStatus(call(endpoints.listDenies, { query: { userId: 'user2' } }), 'FORBIDDEN')
+})
 
 // y-tu-que-compras scenario: organization/list has no hook but consumers
 // filter via permissionFiltering; a valid session must still be enough.
@@ -332,7 +436,7 @@ test('invitation/by-token with configured no-op hook: anonymous lookup proceeds'
   })
   const data = await response
   expect(data.status).toBe('pending')
-  expect(data.invitationCode).toBe('CODE01')
+  expect(data.invitationCode).toBe('ABCD2345')
 })
 
 test('organization/list anonymous callers get 401 even with permissionFiltering configured', async () => {
@@ -352,7 +456,15 @@ test('organization/list anonymous callers get 401 even with permissionFiltering 
 })
 
 // ---------------------------------------------------------------------------
-// M8: revokePermission passes the session to its hook
+// M8 (#36): revokePermission passes the session to its hook.
+//
+// The issue's two impact modes, covered end-to-end:
+// - an identity-authorizing hook must see the caller identity and allow the
+//   revoke (with the bug it received null -> TypeError -> 500, accidentally
+//   DoSing the whole revocation feature);
+// - the same hook must deny a mismatched caller (a hook that treats null as
+//   "no identity required" would silently authorize revoking anyone's
+//   permissions — CWE-863).
 // ---------------------------------------------------------------------------
 
 test('revokePermission passes session and resource to the hook (M8)', async () => {
@@ -372,6 +484,42 @@ test('revokePermission passes session and resource to the hook (M8)', async () =
   await response
   expect(seen.session?.user?.id).toBe('user1')
   expect(seen.ctx.resource?.contextType).toBe('organization')
+})
+
+test('revokePermission: identity-authorizing hook sees the caller and allows the revoke (#36)', async () => {
+  const identityHook = async ({ session }) => {
+    if (session?.user?.id !== 'user1') {
+      throw new APIError('FORBIDDEN', { message: 'revocation restricted to user1' })
+    }
+  }
+  const adapter = fakeAdapter()
+  const response = await permissionEndpoints({
+    endpoints: { permission: { revoke: identityHook } },
+  }).revokePermission({
+    headers: new Headers(),
+    context: { adapter, session: authedSession() },
+    body: { permissionId: 'row1', type: 'grant' },
+  })
+  await response
+  expect(adapter.ops).toContain('delete')
+})
+
+test('revokePermission: identity-authorizing hook denies a mismatched caller (#36)', async () => {
+  const identityHook = async ({ session }) => {
+    if (session?.user?.id !== 'admin9') {
+      throw new APIError('FORBIDDEN', { message: 'revocation restricted to admin9' })
+    }
+  }
+  await expectStatus(
+    permissionEndpoints({
+      endpoints: { permission: { revoke: identityHook } },
+    }).revokePermission({
+      headers: new Headers(),
+      context: { adapter: fakeAdapter(), session: authedSession() },
+      body: { permissionId: 'row1', type: 'grant' },
+    }),
+    'FORBIDDEN',
+  )
 })
 
 // ---------------------------------------------------------------------------

@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { createAuthEndpoint, APIError, getSessionFromCtx } from 'better-auth/api'
-import type { Adapter } from 'better-auth'
+import { createAuthEndpoint, APIError } from 'better-auth/api'
+import type { DBAdapter } from 'better-auth'
 import type { PermissionGrant, PermissionDeny } from '../schema/index.js'
 import type { ContextType } from '../types/context.js'
 import type { StatementId } from '../types/statement.js'
 import type { TenancyConfig, ResourceContext } from '../types/config.js'
-import { applyEndpointAuth, getOptionalSession, requireEndpointAuth, requireSession } from './middleware.js'
+import { requireEndpointAuth, requireSession, requireSelfOr } from './middleware.js'
 import {
   ok, created, noContent, okArray, okBatch,
   permissionGrantSchema, permissionDenySchema, permissionCheckSchema, permissionContextSchema,
@@ -16,7 +16,7 @@ import {
  * This helper is used to enrich endpoint hooks with resource context
  */
 export async function findPermissionContext(
-  adapter: Adapter,
+  adapter: DBAdapter,
   permissionId: string,
   type: 'grant' | 'deny'
 ): Promise<ResourceContext | null> {
@@ -304,16 +304,18 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'Check permission',
-          description: 'Check if user has permission',
+          description: 'Check if user has permission (requires authentication; checks for another user require the permission.check hook)',
           responses: ok(permissionCheckSchema, 'Permission evaluation result'),
         },
       },
     },
     async (ctx) => {
-      const session = await getOptionalSession(ctx)
-      await applyEndpointAuth(config?.endpoints?.permission?.check, ctx, session)
+      const session = await requireSession(ctx)
 
       const { userId, statementId, contextType, contextId } = ctx.body
+
+      // Permission oracle: self-checks by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.permission?.check, ctx, session)
 
       const result = await resolvePermission(ctx.context.adapter, {
         userId,
@@ -338,16 +340,17 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List grants',
-          description: 'List all grants for a user',
+          description: 'List all grants for a user (requires authentication; lookups for another user require the permission.listGrants hook)',
           responses: okArray(permissionGrantSchema, 'The user\'s grants'),
         },
       },
     },
     async (ctx) => {
-      const session = await getSessionFromCtx(ctx)
-      await applyEndpointAuth(config?.endpoints?.permission?.listGrants, ctx, session)
-
+      const session = await requireSession(ctx)
       const { userId, contextType, contextId } = ctx.query
+
+      // Subject lookup: self by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.permission?.listGrants, ctx, session)
 
       const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
@@ -378,16 +381,17 @@ export const permissionEndpoints = (config?: TenancyConfig) => ({
       metadata: {
         openapi: {
           summary: 'List denies',
-          description: 'List all denies for a user',
+          description: 'List all denies for a user (requires authentication; lookups for another user require the permission.listDenies hook)',
           responses: okArray(permissionDenySchema, 'The user\'s denies'),
         },
       },
     },
     async (ctx) => {
-      const session = await getSessionFromCtx(ctx)
-      await applyEndpointAuth(config?.endpoints?.permission?.listDenies, ctx, session)
-
+      const session = await requireSession(ctx)
       const { userId, contextType, contextId } = ctx.query
+
+      // Subject lookup: self by default, dedicated hook is the admin override
+      await requireSelfOr(userId === session.user.id, config?.endpoints?.permission?.listDenies, ctx, session)
 
       const where: Array<{ field: string; value: string }> = [{ field: 'userId', value: userId }]
       if (contextType) {
@@ -807,7 +811,7 @@ export interface ResolvePermissionResult {
  * resolution by hand — hand copies drift and only resolve grants.
  */
 export async function resolvePermission(
-  adapter: Adapter,
+  adapter: DBAdapter,
   input: CheckPermissionInput,
   config?: TenancyConfig,
   // ponytail: visited set guards cyclic/self-referential parentId chains
@@ -955,7 +959,7 @@ export function requirePermission(statementId: StatementId) {
 
 // Helper function for cleaning up permissions (used by other modules)
 export async function cleanupContextPermissions(
-  adapter: Adapter,
+  adapter: DBAdapter,
   contextType: ContextType,
   contextId: string
 ): Promise<{ grantsDeleted: number; deniesDeleted: number }> {
