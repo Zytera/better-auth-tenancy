@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.1.0
 
 ### Internal
 
@@ -49,6 +49,16 @@
   identity-based hooks with a `TypeError` -> 500 and let null-blind hooks
   silently authorize revoking anyone's permissions).
 
+- **Post-review hardening of the 4.1.0 release.** Package version bumped
+  from 4.0.0 to 4.1.0 (the README already referenced 4.1.0 as the
+  breakpoint for pre-upgrade invitation behavior); `invitation/reject`
+  now enforces the same code-format validation as `by-code`/`accept`
+  (legacy 6-character codes -> `400 Bad Request` on every code-entry
+  point); the peer-compat CI job also runs `type-check` against the
+  pinned better-auth floor; and a regression test pins that anonymous
+  oracle calls return 401 even when hooks are configured (the documented
+  #34 contract).
+
 ### Breaking (security)
 
 - **The `zod` peer dependency floor is now `^4.6.6` (#35, GHSA-mrhx-c7xc-m3w5,
@@ -79,11 +89,13 @@
   excluded for manual entry): 32⁸ = 2⁴⁰ ≈ 1.1 × 10¹² combinations, same
   CSPRNG as the link/QR token.
   - **Breaking:** `isValidInvitationCode` (and therefore
-    `GET /tenancy/invitation/by-code/:code` and the `invitationCode` path of
-    `POST /tenancy/invitation/accept`) rejects the legacy 6-character format
-    with `400 Bad Request`: pending invitations created by earlier versions
-    must be re-issued. Token-based (link/QR) invitations are unaffected —
-    the long token already used a CSPRNG.
+    `GET /tenancy/invitation/by-code/:code`, the `invitationCode` path of
+    `POST /tenancy/invitation/accept`, and — aligned in the 4.1.0 review —
+    the `invitationCode` path of `POST /tenancy/invitation/reject`) rejects
+    the legacy 6-character format with `400 Bad Request`: pending
+    invitations created by earlier versions must be re-issued. Token-based
+    (link/QR) invitations are unaffected — the long token already used a
+    CSPRNG.
   - Rate limiting per code and per IP for `by-code`/`accept` remains the
     consumer's responsibility, as for the other invitation endpoints (see
     Security Best Practices in the README).
